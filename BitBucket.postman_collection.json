@@ -1,0 +1,159 @@
+{
+	"info": {
+		"_postman_id": "b819aac8-f11d-4f54-ad57-41a2362fd88e",
+		"name": "BitBucket",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "24403568"
+	},
+	"item": [
+		{
+			"name": "PR activity list",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "https://api.bitbucket.org/2.0/repositories/{{workspace}}/{{repo}}/pullrequests/{{pr_id}}/activity?pagelen=10",
+					"protocol": "https",
+					"host": [
+						"api",
+						"bitbucket",
+						"org"
+					],
+					"path": [
+						"2.0",
+						"repositories",
+						"{{workspace}}",
+						"{{repo}}",
+						"pullrequests",
+						"{{pr_id}}",
+						"activity"
+					],
+					"query": [
+						{
+							"key": "pagelen",
+							"value": "10"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PR list",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "https://api.bitbucket.org/2.0/repositories/{{workspace}}/{{repo}}/pullrequests?pagelen=10",
+					"protocol": "https",
+					"host": [
+						"api",
+						"bitbucket",
+						"org"
+					],
+					"path": [
+						"2.0",
+						"repositories",
+						"{{workspace}}",
+						"{{repo}}",
+						"pullrequests"
+					],
+					"query": [
+						{
+							"key": "pagelen",
+							"value": "10"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PR commit list",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "https://api.bitbucket.org/2.0/repositories/{{workspace}}/{{repo}}/pullrequests?pagelen=10",
+					"protocol": "https",
+					"host": [
+						"api",
+						"bitbucket",
+						"org"
+					],
+					"path": [
+						"2.0",
+						"repositories",
+						"{{workspace}}",
+						"{{repo}}",
+						"pullrequests"
+					],
+					"query": [
+						{
+							"key": "pagelen",
+							"value": "10"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "workspace",
+			"value": "YOUR_TEAM_WORKSPACE"
+		},
+		{
+			"key": "repo",
+			"value": "YOUR_REPO_NAME"
+		},
+		{
+			"key": "pr_id",
+			"value": "PULL_REQUEST_ID"
+		},
+		{
+			"key": "page_len",
+			"value": "PAGE_LENGTH"
+		},
+		{
+			"key": "auth_token",
+			"value": "Bearer BITBUCKET_AUTH_TOKEN"
+		}
+	]
+}
