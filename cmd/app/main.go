@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/david-kartopranoto/repo-scrapper/util"
+	"github.com/dasdaka/repo-scrapper/util"
 )
 
 func main() {

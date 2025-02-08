@@ -1,4 +1,4 @@
-module github.com/david-kartopranoto/repo-scrapper
+module github.com/dasdaka/repo-scrapper
 
 go 1.20
 
