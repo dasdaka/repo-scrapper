@@ -53,26 +53,31 @@ type PRRow struct {
 
 // FilterParams carries parsed query parameters.
 type FilterParams struct {
-	DateFrom time.Time
-	DateTo   time.Time
-	Repos    []string
-	Authors  []string
+	DateFrom     time.Time
+	DateTo       time.Time
+	Repos        []string
+	Authors      []string // include filter: matches Author OR User
+	ExcludeUsers []string // exclude filter: drops rows where Author OR User matches
 }
 
 // DashboardStore holds in-memory data loaded from the pr_report DB table.
 type DashboardStore struct {
-	mu         sync.RWMutex
-	activities []ActivityRow
-	dsn        string
-	botSet     map[string]bool
+	mu              sync.RWMutex
+	activities      []ActivityRow
+	dsn             string
+	botSet          map[string]bool
+	excludedAuthors []string
 }
 
 func NewStore(dsn string, excludedAuthors []string) *DashboardStore {
-	return &DashboardStore{dsn: dsn, botSet: toSet(excludedAuthors)}
+	return &DashboardStore{dsn: dsn, botSet: toSet(excludedAuthors), excludedAuthors: excludedAuthors}
 }
 
 // BotSet returns the set of excluded author/user names.
 func (s *DashboardStore) BotSet() map[string]bool { return s.botSet }
+
+// ExcludedAuthors returns the configured excluded author/user names.
+func (s *DashboardStore) ExcludedAuthors() []string { return s.excludedAuthors }
 
 // Load queries the pr_report table and refreshes the in-memory cache.
 func (s *DashboardStore) Load() error {
@@ -143,12 +148,16 @@ func shortRepo(fullName string) string {
 }
 
 func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) []ActivityRow {
-	repoSet := toSet(p.Repos)
-	authorSet := toSet(p.Authors)
+	repoSet      := toSet(p.Repos)
+	authorSet    := toSet(p.Authors)
+	excludeSet   := toSet(p.ExcludeUsers)
 
 	var out []ActivityRow
 	for _, r := range rows {
-		if bots[r.Author] {
+		if bots[r.Author] || bots[r.User] {
+			continue
+		}
+		if len(excludeSet) > 0 && (excludeSet[r.Author] || excludeSet[r.User]) {
 			continue
 		}
 		if !p.DateFrom.IsZero() && r.Updated.Before(p.DateFrom) {
@@ -160,7 +169,8 @@ func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) 
 		if len(repoSet) > 0 && !repoSet[shortRepo(r.SrcRepo)] {
 			continue
 		}
-		if len(authorSet) > 0 && !authorSet[r.Author] {
+		// Authors filter matches on either PR author or activity user.
+		if len(authorSet) > 0 && !authorSet[r.Author] && !authorSet[r.User] {
 			continue
 		}
 		out = append(out, r)
@@ -251,8 +261,28 @@ type ChartsResponse struct {
 
 // BuildCharts aggregates filtered activity rows into chart data.
 // bots is an optional set of excluded user names; pass nil to include everyone.
-func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
-	prs := deduplicatePRs(rows)
+// p controls per-chart field-specific filtering:
+//   - PR Count / Code Changes / Summary / PR by Month / Changes by Repo →
+//     Authors and ExcludeUsers are matched against the Author field only.
+//   - Review Activity by User →
+//     Authors and ExcludeUsers are matched against the User field only.
+func BuildCharts(rows []ActivityRow, bots map[string]bool, p FilterParams) ChartsResponse {
+	authorSet  := toSet(p.Authors)
+	excludeSet := toSet(p.ExcludeUsers)
+
+	// prRows: rows whose PR Author passes the include/exclude filters.
+	var prRows []ActivityRow
+	for _, r := range rows {
+		if len(authorSet) > 0 && !authorSet[r.Author] {
+			continue
+		}
+		if excludeSet[r.Author] {
+			continue
+		}
+		prRows = append(prRows, r)
+	}
+
+	prs := deduplicatePRs(prRows)
 
 	authors := make(map[string]bool)
 	repos := make(map[string]bool)
@@ -280,9 +310,16 @@ func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
 		codeByAuthor[pr.Author].Total += pr.Total
 	}
 
+	// actByUser: rows whose activity User passes the include/exclude filters.
 	actByUser := make(map[string]*ActivityBreakdown)
 	for _, r := range rows {
 		if r.User == "" || bots[r.User] {
+			continue
+		}
+		if len(authorSet) > 0 && !authorSet[r.User] {
+			continue
+		}
+		if excludeSet[r.User] {
 			continue
 		}
 		if _, ok := actByUser[r.User]; !ok {
@@ -331,16 +368,17 @@ func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
 
 // MetaResponse is returned by /api/meta for populating filter dropdowns.
 type MetaResponse struct {
-	Repos   []string `json:"repos"`
-	Authors []string `json:"authors"`
-	Users   []string `json:"users"`
-	DateMin string   `json:"dateMin"`
-	DateMax string   `json:"dateMax"`
+	Repos           []string `json:"repos"`
+	Authors         []string `json:"authors"`
+	Users           []string `json:"users"`
+	ExcludedAuthors []string `json:"excludedAuthors"`
+	DateMin         string   `json:"dateMin"`
+	DateMax         string   `json:"dateMax"`
 }
 
 // BuildMeta scans all rows to find distinct filter options and date bounds.
 // bots is an optional set of excluded user names; pass nil to include everyone.
-func BuildMeta(rows []ActivityRow, bots map[string]bool) MetaResponse {
+func BuildMeta(rows []ActivityRow, bots map[string]bool, excludedAuthors []string) MetaResponse {
 	repoSet := make(map[string]bool)
 	authorSet := make(map[string]bool)
 	userSet := make(map[string]bool)
@@ -373,11 +411,12 @@ func BuildMeta(rows []ActivityRow, bots map[string]bool) MetaResponse {
 	}
 
 	return MetaResponse{
-		Repos:   sortedKeys(repoSet),
-		Authors: sortedKeys(authorSet),
-		Users:   sortedKeys(userSet),
-		DateMin: dateMin,
-		DateMax: dateMax,
+		Repos:           sortedKeys(repoSet),
+		Authors:         sortedKeys(authorSet),
+		Users:           sortedKeys(userSet),
+		ExcludedAuthors: excludedAuthors,
+		DateMin:         dateMin,
+		DateMax:         dateMax,
 	}
 }
 
