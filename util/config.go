@@ -30,9 +30,6 @@ type BitbucketConfig struct {
 }
 
 type ReportConfig struct {
-	// CSVExportPath is a fmt format string with one %s for the repo name
-	// (e.g. "activity-%s.csv"). Leave empty to skip CSV export.
-	CSVExportPath string `mapstructure:"csv_export_path"`
 	// DBConnStr is a PostgreSQL connection string, e.g.
 	// "postgres://user:password@localhost:5432/repo_scrapper?sslmode=disable"
 	DBConnStr string `mapstructure:"db_dsn"`

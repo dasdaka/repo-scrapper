@@ -97,26 +97,6 @@ func (rn *runner) runAggregate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (rn *runner) runExport(w http.ResponseWriter, r *http.Request) {
-	sseRun(w, func(send func(string)) {
-		if rn.cfg.Report.CSVExportPath == "" {
-			send("ERROR: csv_export_path is not configured.")
-			return
-		}
-		logf := dualLog(send)
-		db, err := util.OpenDB(rn.cfg.Report.DBConnStr)
-		if err != nil {
-			send("ERROR: " + err.Error())
-			return
-		}
-		defer db.Close()
-		if err := util.ExportCSV(r.Context(), db, rn.cfg.Report, rn.cfg.Bitbucket.RepoList, logf); err != nil {
-			send("ERROR: " + err.Error())
-			return
-		}
-	})
-}
-
 // Serve starts the dashboard HTTP server, loading data from the configured PostgreSQL DB.
 func Serve(cfg util.Config) error {
 	dsn := cfg.Report.DBConnStr
@@ -156,7 +136,6 @@ func Serve(cfg util.Config) error {
 	})
 	mux.HandleFunc("/api/run/scrape", rn.runScrape)
 	mux.HandleFunc("/api/run/aggregate", rn.runAggregate)
-	mux.HandleFunc("/api/run/export", rn.runExport)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(indexHTML)

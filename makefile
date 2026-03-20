@@ -1,4 +1,4 @@
-.PHONY: build run serve scrape aggregate export all test clean help
+.PHONY: build run serve scrape aggregate all test clean help
 
 BINARY := app.exe
 
@@ -18,11 +18,7 @@ scrape: build
 aggregate: build
 	./$(BINARY) aggregate
 
-## export      Build then write CSV files (requires csv_export_path in config)
-export: build
-	./$(BINARY) export
-
-## run         Build then run the full pipeline  scrape -> aggregate -> export
+## run         Build then run the full pipeline  scrape -> aggregate
 run: build
 	./$(BINARY) all
 
