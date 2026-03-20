@@ -104,7 +104,7 @@ func Serve(cfg util.Config) error {
 		dsn = "postgres://postgres:postgres@localhost:5432/repo_scrapper?sslmode=disable"
 	}
 
-	store := NewStore(dsn)
+	store := NewStore(dsn, cfg.Dashboard.ExcludedAuthors)
 	if err := store.Load(); err != nil {
 		log.Printf("Warning: could not load data from DB %q: %v", dsn, err)
 	} else {
@@ -120,11 +120,11 @@ func Serve(cfg util.Config) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/meta", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, BuildMeta(store.Activities()))
+		writeJSON(w, BuildMeta(store.Activities(), store.BotSet()))
 	})
 	mux.HandleFunc("/api/charts", func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)
-		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params)))
+		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, store.BotSet()), store.BotSet()))
 	})
 	mux.HandleFunc("/api/table", tableHandler(store))
 	mux.HandleFunc("/api/reload", func(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +149,7 @@ func Serve(cfg util.Config) error {
 func tableHandler(store *DashboardStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)
-		prs := deduplicatePRs(filterActivities(store.Activities(), params))
+		prs := deduplicatePRs(filterActivities(store.Activities(), params, store.BotSet()))
 
 		page, pageSize := 1, 20
 		fmt.Sscan(r.URL.Query().Get("page"), &page)

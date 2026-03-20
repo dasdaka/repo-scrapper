@@ -6,6 +6,9 @@ import (
 
 type DashboardConfig struct {
 	Port int `mapstructure:"port"`
+	// ExcludedAuthors is a list of display names to hide from all charts,
+	// tables, and filter dropdowns (e.g. bots, service accounts).
+	ExcludedAuthors []string `mapstructure:"excluded_authors"`
 }
 
 type Config struct {
