@@ -85,21 +85,21 @@ func TestFilterActivities(t *testing.T) {
 	}
 
 	t.Run("no filter returns all rows", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{})
+		got := filterActivities(rows, FilterParams{}, nil)
 		if len(got) != 3 {
 			t.Errorf("want 3, got %d", len(got))
 		}
 	})
 
 	t.Run("dateFrom filters out older rows", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{DateFrom: date("2024-02-01")})
+		got := filterActivities(rows, FilterParams{DateFrom: date("2024-02-01")}, nil)
 		if len(got) != 2 {
 			t.Errorf("want 2, got %d", len(got))
 		}
 	})
 
 	t.Run("dateTo filters out newer rows", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{DateTo: date("2024-02-01")})
+		got := filterActivities(rows, FilterParams{DateTo: date("2024-02-01")}, nil)
 		if len(got) != 1 {
 			t.Errorf("want 1, got %d", len(got))
 		}
@@ -109,21 +109,21 @@ func TestFilterActivities(t *testing.T) {
 		got := filterActivities(rows, FilterParams{
 			DateFrom: date("2024-02-01"),
 			DateTo:   date("2024-02-28"),
-		})
+		}, nil)
 		if len(got) != 1 || got[0].ID != 2 {
 			t.Errorf("want row ID=2, got %v", got)
 		}
 	})
 
 	t.Run("repo filter", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{Repos: []string{"repo-b"}})
+		got := filterActivities(rows, FilterParams{Repos: []string{"repo-b"}}, nil)
 		if len(got) != 1 || got[0].ID != 3 {
 			t.Errorf("want row 3, got %v", got)
 		}
 	})
 
 	t.Run("author filter", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{Authors: []string{"Dave"}})
+		got := filterActivities(rows, FilterParams{Authors: []string{"Dave"}}, nil)
 		if len(got) != 1 || got[0].ID != 3 {
 			t.Errorf("want row 3, got %v", got)
 		}
@@ -133,16 +133,29 @@ func TestFilterActivities(t *testing.T) {
 		got := filterActivities(rows, FilterParams{
 			Repos:   []string{"repo-a"},
 			Authors: []string{"Alice"},
-		})
+		}, nil)
 		if len(got) != 2 {
 			t.Errorf("want 2, got %d", len(got))
 		}
 	})
 
 	t.Run("no match returns nil", func(t *testing.T) {
-		got := filterActivities(rows, FilterParams{Authors: []string{"NoOne"}})
+		got := filterActivities(rows, FilterParams{Authors: []string{"NoOne"}}, nil)
 		if len(got) != 0 {
 			t.Errorf("want 0, got %d", len(got))
+		}
+	})
+
+	t.Run("excluded author is hidden from all results", func(t *testing.T) {
+		bots := map[string]bool{"Alice": true}
+		got := filterActivities(rows, FilterParams{}, bots)
+		for _, r := range got {
+			if r.Author == "Alice" {
+				t.Errorf("bot author Alice should be excluded, got row ID=%d", r.ID)
+			}
+		}
+		if len(got) != 1 || got[0].Author != "Dave" {
+			t.Errorf("want only Dave's row, got %v", got)
 		}
 	})
 }
@@ -192,7 +205,7 @@ func TestDeduplicatePRs(t *testing.T) {
 
 func TestBuildMeta(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
-		m := BuildMeta(nil)
+		m := BuildMeta(nil, nil)
 		if m.DateMin != "" || m.DateMax != "" {
 			t.Error("expected empty date bounds for empty input")
 		}
@@ -203,7 +216,7 @@ func TestBuildMeta(t *testing.T) {
 			{SrcRepo: "ws/repo-a", Author: "Alice", User: "Bob", Updated: date("2024-01-01")},
 			{SrcRepo: "ws/repo-b", Author: "Charlie", User: "Alice", Updated: date("2024-06-01")},
 		}
-		m := BuildMeta(rows)
+		m := BuildMeta(rows, nil)
 
 		if len(m.Repos) != 2 {
 			t.Errorf("want 2 repos, got %d", len(m.Repos))
@@ -223,7 +236,7 @@ func TestBuildMeta(t *testing.T) {
 			makeRow(2, "ws/r", "A", "approval", "B", date("2024-01-01")),
 			makeRow(3, "ws/r", "A", "approval", "B", date("2024-12-31")),
 		}
-		m := BuildMeta(rows)
+		m := BuildMeta(rows, nil)
 		if m.DateMin != "2024-01-01" {
 			t.Errorf("want DateMin=2024-01-01, got %q", m.DateMin)
 		}
@@ -237,7 +250,7 @@ func TestBuildMeta(t *testing.T) {
 			{SrcRepo: "ws/z-repo", Updated: date("2024-01-01")},
 			{SrcRepo: "ws/a-repo", Updated: date("2024-01-01")},
 		}
-		m := BuildMeta(rows)
+		m := BuildMeta(rows, nil)
 		if m.Repos[0] != "a-repo" || m.Repos[1] != "z-repo" {
 			t.Errorf("repos not sorted: %v", m.Repos)
 		}
@@ -247,7 +260,7 @@ func TestBuildMeta(t *testing.T) {
 // --- BuildCharts ---
 
 func TestBuildCharts_Empty(t *testing.T) {
-	c := BuildCharts(nil)
+	c := BuildCharts(nil, nil)
 	if c.Summary.TotalPRs != 0 {
 		t.Error("expected 0 PRs for empty input")
 	}
@@ -259,7 +272,7 @@ func TestBuildCharts_Summary(t *testing.T) {
 		{ID: 1, SrcRepo: "ws/repo-a", Author: "Alice", Added: 100, Removed: 20, Total: 120, Updated: date("2024-01-01"), Type: "pullrequest_comment", User: "Carol"},
 		{ID: 2, SrcRepo: "ws/repo-b", Author: "Dave", Added: 50, Removed: 10, Total: 60, Updated: date("2024-02-01"), Type: "approval", User: "Alice"},
 	}
-	c := BuildCharts(rows)
+	c := BuildCharts(rows, nil)
 
 	if c.Summary.TotalPRs != 2 {
 		t.Errorf("want TotalPRs=2, got %d", c.Summary.TotalPRs)
@@ -281,7 +294,7 @@ func TestBuildCharts_PRCountByAuthor(t *testing.T) {
 		{ID: 2, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 1, Updated: date("2024-01-01")},
 		{ID: 3, Author: "Bob", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 1, Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows)
+	c := BuildCharts(rows, nil)
 
 	byAuthor := map[string]int{}
 	for _, lv := range c.PRCountByAuthor {
@@ -298,7 +311,7 @@ func TestBuildCharts_ActivityByUser(t *testing.T) {
 		{ID: 1, Author: "A", SrcRepo: "ws/r", Type: "pullrequest_comment", User: "Bob", Updated: date("2024-01-01")},
 		{ID: 1, Author: "A", SrcRepo: "ws/r", Type: "pullrequest_comment", User: "Carol", Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows)
+	c := BuildCharts(rows, nil)
 
 	byUser := map[string]ActivityBreakdown{}
 	for _, ab := range c.ActivityByUser {
@@ -318,7 +331,7 @@ func TestBuildCharts_PRCountByMonth(t *testing.T) {
 		{ID: 2, Author: "A", SrcRepo: "ws/r", Type: "approval", User: "X", Updated: date("2024-01-20"), Added: 1},
 		{ID: 3, Author: "A", SrcRepo: "ws/r", Type: "approval", User: "X", Updated: date("2024-02-10"), Added: 1},
 	}
-	c := BuildCharts(rows)
+	c := BuildCharts(rows, nil)
 
 	byMonth := map[string]int{}
 	for _, lv := range c.PRCountByMonth {
@@ -335,7 +348,7 @@ func TestBuildCharts_SortOrder(t *testing.T) {
 		{ID: 2, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 100, Total: 100, Updated: date("2024-01-01")},
 		{ID: 3, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 100, Total: 100, Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows)
+	c := BuildCharts(rows, nil)
 
 	// PRCountByAuthor: Alice(2) before Bob(1)
 	if c.PRCountByAuthor[0].Label != "Alice" {

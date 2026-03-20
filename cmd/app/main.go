@@ -16,8 +16,7 @@ const usage = `Usage: app <command>
 Commands:
   scrape      Fetch raw data from the Bitbucket API and store in the database
   aggregate   Build the pr_report summary table from the stored raw data
-  export      Export pr_report to CSV (requires csv_export_path in config)
-  all         Run scrape → aggregate → export in sequence  (default)
+  all         Run scrape → aggregate in sequence  (default)
   serve       Start the web dashboard
 `
 
@@ -32,12 +31,9 @@ func main() {
 		mustRun(runScrape)
 	case "aggregate":
 		mustRun(runAggregate)
-	case "export":
-		mustRun(runExport)
 	case "all":
 		mustRun(runScrape)
 		mustRun(runAggregate)
-		mustRun(runExport)
 	case "serve":
 		runServe()
 	default:
@@ -101,26 +97,6 @@ func runAggregate() error {
 		return fmt.Errorf("aggregate: %w", err)
 	}
 	log.Println("aggregate: done")
-	return nil
-}
-
-// runExport writes CSV files from pr_report (no-op when csv_export_path is empty).
-func runExport() error {
-	cfg, db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	if cfg.Report.CSVExportPath == "" {
-		log.Println("export: csv_export_path not set, skipping")
-		return nil
-	}
-	log.Println("export: writing CSV files")
-	if err := util.ExportCSV(context.Background(), db, cfg.Report, cfg.Bitbucket.RepoList, util.TerminalLog); err != nil {
-		return fmt.Errorf("export: %w", err)
-	}
-	log.Println("export: done")
 	return nil
 }
 

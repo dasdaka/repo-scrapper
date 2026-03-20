@@ -538,14 +538,6 @@
         <button id="btn-aggregate" onclick="runOp('aggregate')">Run Aggregate</button>
       </div>
     </div>
-    <div class="scraper-card">
-      <div class="scraper-card-title">3 · Export CSV</div>
-      <div class="scraper-card-desc">Write one CSV file per repository from the aggregated report data. Requires <code style="color:var(--accent2)">csv_export_path</code> to be set in config.</div>
-      <div class="scraper-card-footer">
-        <span class="run-status status-idle" id="status-export">idle</span>
-        <button id="btn-export" onclick="runOp('export')">Run Export</button>
-      </div>
-    </div>
   </div>
 
   <div class="log-panel">
@@ -870,7 +862,7 @@ function appendLog(line, type) {
 
 function clearLog() {
   document.getElementById('log-output').innerHTML = '';
-  ['scrape', 'aggregate', 'export'].forEach(op => setRunStatus(op, 'idle'));
+  ['scrape', 'aggregate'].forEach(op => setRunStatus(op, 'idle'));
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

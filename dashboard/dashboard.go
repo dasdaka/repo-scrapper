@@ -61,14 +61,18 @@ type FilterParams struct {
 
 // DashboardStore holds in-memory data loaded from the pr_report DB table.
 type DashboardStore struct {
-	mu       sync.RWMutex
+	mu         sync.RWMutex
 	activities []ActivityRow
-	dsn      string
+	dsn        string
+	botSet     map[string]bool
 }
 
-func NewStore(dsn string) *DashboardStore {
-	return &DashboardStore{dsn: dsn}
+func NewStore(dsn string, excludedAuthors []string) *DashboardStore {
+	return &DashboardStore{dsn: dsn, botSet: toSet(excludedAuthors)}
 }
+
+// BotSet returns the set of excluded author/user names.
+func (s *DashboardStore) BotSet() map[string]bool { return s.botSet }
 
 // Load queries the pr_report table and refreshes the in-memory cache.
 func (s *DashboardStore) Load() error {
@@ -138,12 +142,15 @@ func shortRepo(fullName string) string {
 	return fullName
 }
 
-func filterActivities(rows []ActivityRow, p FilterParams) []ActivityRow {
+func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) []ActivityRow {
 	repoSet := toSet(p.Repos)
 	authorSet := toSet(p.Authors)
 
 	var out []ActivityRow
 	for _, r := range rows {
+		if bots[r.Author] {
+			continue
+		}
 		if !p.DateFrom.IsZero() && r.Updated.Before(p.DateFrom) {
 			continue
 		}
@@ -243,7 +250,8 @@ type ChartsResponse struct {
 }
 
 // BuildCharts aggregates filtered activity rows into chart data.
-func BuildCharts(rows []ActivityRow) ChartsResponse {
+// bots is an optional set of excluded user names; pass nil to include everyone.
+func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
 	prs := deduplicatePRs(rows)
 
 	authors := make(map[string]bool)
@@ -274,7 +282,7 @@ func BuildCharts(rows []ActivityRow) ChartsResponse {
 
 	actByUser := make(map[string]*ActivityBreakdown)
 	for _, r := range rows {
-		if r.User == "" {
+		if r.User == "" || bots[r.User] {
 			continue
 		}
 		if _, ok := actByUser[r.User]; !ok {
@@ -331,7 +339,8 @@ type MetaResponse struct {
 }
 
 // BuildMeta scans all rows to find distinct filter options and date bounds.
-func BuildMeta(rows []ActivityRow) MetaResponse {
+// bots is an optional set of excluded user names; pass nil to include everyone.
+func BuildMeta(rows []ActivityRow, bots map[string]bool) MetaResponse {
 	repoSet := make(map[string]bool)
 	authorSet := make(map[string]bool)
 	userSet := make(map[string]bool)
@@ -339,10 +348,10 @@ func BuildMeta(rows []ActivityRow) MetaResponse {
 
 	for _, r := range rows {
 		repoSet[shortRepo(r.SrcRepo)] = true
-		if r.Author != "" {
+		if r.Author != "" && !bots[r.Author] {
 			authorSet[r.Author] = true
 		}
-		if r.User != "" {
+		if r.User != "" && !bots[r.User] {
 			userSet[r.User] = true
 		}
 		if !r.Updated.IsZero() {

@@ -28,10 +28,10 @@ report:
     # Format: postgres://user:password@host:port/dbname?sslmode=disable
     db_dsn: "postgres://postgres:postgres@localhost:5432/repo_scrapper?sslmode=disable"
 
-    # csv_export_path is optional. When set, the `export` command writes one CSV
-    # per repo. Use a single %s placeholder for the repo name.
-    # Leave empty to skip CSV export entirely.
-    csv_export_path: ""
-
 dashboard:
     port: 8080
+
+    # excluded_authors hides specific users from all charts, tables, and filter
+    # dropdowns. Add bots, service accounts, or AI agents here.
+    excluded_authors:
+        - "Service Account Bito"
