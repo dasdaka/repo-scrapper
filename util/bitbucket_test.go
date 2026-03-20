@@ -355,32 +355,76 @@ func TestFetchAllActivity(t *testing.T) {
 	}
 }
 
-func TestFetchAllDiffStat(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"values": []map[string]interface{}{
-				{"lines_added": 10, "lines_removed": 2, "status": "modified"},
-			},
+func TestParseDiff(t *testing.T) {
+	cases := []struct {
+		name    string
+		diff    string
+		added   int
+		removed int
+	}{
+		{
+			name:    "basic hunk",
+			diff:    "--- a/x.go\n+++ b/x.go\n@@ -1 +1,2 @@\n-old\n+new\n+extra\n",
+			added:   2,
+			removed: 1,
+		},
+		{
+			name:    "empty diff",
+			diff:    "",
+			added:   0,
+			removed: 0,
+		},
+		{
+			name:    "binary file marker counts nothing",
+			diff:    "Binary files a/img.png and b/img.png differ\n",
+			added:   0,
+			removed: 0,
+		},
+		{
+			name:    "multiple files",
+			diff:    "--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-old\n+new\n--- a/b.go\n+++ b/b.go\n@@ -1 +1,2 @@\n unchanged\n+added\n",
+			added:   2,
+			removed: 1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got_a, got_r := parseDiff([]byte(tc.diff))
+			if got_a != tc.added || got_r != tc.removed {
+				t.Errorf("want added=%d removed=%d, got added=%d removed=%d",
+					tc.added, tc.removed, got_a, got_r)
+			}
 		})
+	}
+}
+
+func TestFetchDiffStat(t *testing.T) {
+	rawDiff := "--- a/x.go\n+++ b/x.go\n@@ -1 +1,2 @@\n-old\n+new\n+extra\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/x-diff")
+		w.Write([]byte(rawDiff))
 	}))
 	defer srv.Close()
 
 	c := NewClientWithOptions(BitbucketConfig{Token: "Bearer t"}, WithHTTPDoer(srv.Client()))
 	pr := PullRequestData{ID: 99}
-	pr.Links.Diffstat.Href = srv.URL + "/diffstat"
+	pr.Links.Diff.Href = srv.URL + "/diff"
 
-	got, err := c.fetchAllDiffStat(context.Background(), pr)
+	got, err := c.fetchDiffStat(context.Background(), pr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("want 1 diffstat, got %d", len(got))
+		t.Fatalf("want 1 result, got %d", len(got))
 	}
 	if got[0].PullRequestID != 99 {
-		t.Errorf("want PullRequestID=99, got %d", got[0].PullRequestID)
+		t.Errorf("PullRequestID: want 99, got %d", got[0].PullRequestID)
 	}
-	if got[0].LinesAdded != 10 {
-		t.Errorf("want LinesAdded=10, got %d", got[0].LinesAdded)
+	if got[0].LinesAdded != 2 {
+		t.Errorf("LinesAdded: want 2, got %d", got[0].LinesAdded)
+	}
+	if got[0].LinesRemoved != 1 {
+		t.Errorf("LinesRemoved: want 1, got %d", got[0].LinesRemoved)
 	}
 }
 
@@ -400,7 +444,7 @@ func TestFetchAllPRData_Concurrent(t *testing.T) {
 		pr := PullRequestData{ID: id}
 		pr.Links.Commits.Href = srv.URL + "/commits"
 		pr.Links.Activity.Href = srv.URL + "/activity"
-		pr.Links.Diffstat.Href = srv.URL + "/diffstat"
+		pr.Links.Diff.Href = srv.URL + "/diff"
 		pr.Links.Comments.Href = srv.URL + "/comments"
 		pr.Links.Statuses.Href = srv.URL + "/statuses"
 		return pr

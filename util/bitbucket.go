@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -213,6 +214,23 @@ func (c *Client) getJSON(ctx context.Context, url string, dst interface{}) error
 	return json.Unmarshal(body, dst)
 }
 
+// getRaw GETs url and returns the raw response body, honouring retry logic.
+func (c *Client) getRaw(ctx context.Context, rawURL string) ([]byte, error) {
+	resp, err := c.do(ctx, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", c.cfg.Token)
+		return req, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
 // ctxSleep sleeps for d or until ctx is done.
 func ctxSleep(ctx context.Context, d time.Duration) error {
 	select {
@@ -383,7 +401,7 @@ func (c *Client) fetchAllPRData(ctx context.Context, pr PullRequestData) (prSubD
 	if data.activity, err = c.fetchAllActivity(ctx, pr); err != nil {
 		return data, fmt.Errorf("PR %d activity: %w", pr.ID, err)
 	}
-	if data.diffstat, err = c.fetchAllDiffStat(ctx, pr); err != nil {
+	if data.diffstat, err = c.fetchDiffStat(ctx, pr); err != nil {
 		return data, fmt.Errorf("PR %d diffstat: %w", pr.ID, err)
 	}
 	if data.comments, err = c.fetchAllComments(ctx, pr); err != nil {
@@ -419,18 +437,46 @@ func (c *Client) fetchAllActivity(ctx context.Context, pr PullRequestData) ([]Pu
 	return data, nil
 }
 
-func (c *Client) fetchAllDiffStat(ctx context.Context, pr PullRequestData) ([]DiffStatActivityData, error) {
-	if pr.Links.Diffstat.Href == "" {
-		return nil, nil
+// fetchDiffStat fetches the raw unified diff for a PR from the /diff endpoint
+// and counts added/removed lines by parsing the diff text. This works for repos
+// where the /diffstat JSON endpoint returns no data (e.g. some server configs).
+func (c *Client) fetchDiffStat(ctx context.Context, pr PullRequestData) ([]DiffStatActivityData, error) {
+	diffURL := pr.Links.Diff.Href
+	if diffURL == "" {
+		diffURL = fmt.Sprintf(
+			"https://api.bitbucket.org/2.0/repositories/%s/%s/pullrequests/%d/diff",
+			url.PathEscape(c.cfg.Workspace),
+			url.PathEscape(pr.Destination.Repository.Name),
+			pr.ID,
+		)
 	}
-	data, err := fetchAllPages[DiffStatActivityData](ctx, c, pr.Links.Diffstat.Href)
+	body, err := c.getRaw(ctx, diffURL)
 	if err != nil {
 		return nil, err
 	}
-	for i := range data {
-		data[i].PullRequestID = pr.ID
+	added, removed := parseDiff(body)
+	return []DiffStatActivityData{{
+		PullRequestID: pr.ID,
+		LinesAdded:    added,
+		LinesRemoved:  removed,
+	}}, nil
+}
+
+// parseDiff counts added and removed lines in a unified diff.
+// Lines beginning with '+' (but not '+++') are added; '-' (but not '---') are removed.
+func parseDiff(diff []byte) (added, removed int) {
+	for _, line := range bytes.Split(diff, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		switch {
+		case line[0] == '+' && !bytes.HasPrefix(line, []byte("+++")):
+			added++
+		case line[0] == '-' && !bytes.HasPrefix(line, []byte("---")):
+			removed++
+		}
 	}
-	return data, nil
+	return
 }
 
 func (c *Client) fetchAllComments(ctx context.Context, pr PullRequestData) ([]CommentData, error) {
