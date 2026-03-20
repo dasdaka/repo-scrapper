@@ -25,3 +25,12 @@
 
 # Go workspace file
 go.work
+
+# Local database and generated files
+*.db
+
+# Claude Code internal
+.claude/
+
+# Allow embedded static assets
+!dashboard/static/index.html
