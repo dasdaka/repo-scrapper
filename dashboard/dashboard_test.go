@@ -158,6 +158,21 @@ func TestFilterActivities(t *testing.T) {
 			t.Errorf("want only Dave's row, got %v", got)
 		}
 	})
+
+	t.Run("excluded user is hidden from all results", func(t *testing.T) {
+		// Bob is a bot reviewer; rows where User=Bob should be dropped.
+		bots := map[string]bool{"Bob": true}
+		got := filterActivities(rows, FilterParams{}, bots)
+		for _, r := range got {
+			if r.User == "Bob" {
+				t.Errorf("bot user Bob should be excluded, got row ID=%d", r.ID)
+			}
+		}
+		// row 1 has User=Bob, rows 2 and 3 have User=Carol/Eve — only 2 rows remain.
+		if len(got) != 2 {
+			t.Errorf("want 2 rows after bot-user exclusion, got %d", len(got))
+		}
+	})
 }
 
 // --- deduplicatePRs ---

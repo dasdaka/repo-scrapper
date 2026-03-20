@@ -148,7 +148,7 @@ func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) 
 
 	var out []ActivityRow
 	for _, r := range rows {
-		if bots[r.Author] {
+		if bots[r.Author] || bots[r.User] {
 			continue
 		}
 		if !p.DateFrom.IsZero() && r.Updated.Before(p.DateFrom) {
