@@ -62,18 +62,22 @@ type FilterParams struct {
 
 // DashboardStore holds in-memory data loaded from the pr_report DB table.
 type DashboardStore struct {
-	mu         sync.RWMutex
-	activities []ActivityRow
-	dsn        string
-	botSet     map[string]bool
+	mu              sync.RWMutex
+	activities      []ActivityRow
+	dsn             string
+	botSet          map[string]bool
+	excludedAuthors []string
 }
 
 func NewStore(dsn string, excludedAuthors []string) *DashboardStore {
-	return &DashboardStore{dsn: dsn, botSet: toSet(excludedAuthors)}
+	return &DashboardStore{dsn: dsn, botSet: toSet(excludedAuthors), excludedAuthors: excludedAuthors}
 }
 
 // BotSet returns the set of excluded author/user names.
 func (s *DashboardStore) BotSet() map[string]bool { return s.botSet }
+
+// ExcludedAuthors returns the configured excluded author/user names.
+func (s *DashboardStore) ExcludedAuthors() []string { return s.excludedAuthors }
 
 // Load queries the pr_report table and refreshes the in-memory cache.
 func (s *DashboardStore) Load() error {
@@ -337,16 +341,17 @@ func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
 
 // MetaResponse is returned by /api/meta for populating filter dropdowns.
 type MetaResponse struct {
-	Repos   []string `json:"repos"`
-	Authors []string `json:"authors"`
-	Users   []string `json:"users"`
-	DateMin string   `json:"dateMin"`
-	DateMax string   `json:"dateMax"`
+	Repos           []string `json:"repos"`
+	Authors         []string `json:"authors"`
+	Users           []string `json:"users"`
+	ExcludedAuthors []string `json:"excludedAuthors"`
+	DateMin         string   `json:"dateMin"`
+	DateMax         string   `json:"dateMax"`
 }
 
 // BuildMeta scans all rows to find distinct filter options and date bounds.
 // bots is an optional set of excluded user names; pass nil to include everyone.
-func BuildMeta(rows []ActivityRow, bots map[string]bool) MetaResponse {
+func BuildMeta(rows []ActivityRow, bots map[string]bool, excludedAuthors []string) MetaResponse {
 	repoSet := make(map[string]bool)
 	authorSet := make(map[string]bool)
 	userSet := make(map[string]bool)
@@ -379,11 +384,12 @@ func BuildMeta(rows []ActivityRow, bots map[string]bool) MetaResponse {
 	}
 
 	return MetaResponse{
-		Repos:   sortedKeys(repoSet),
-		Authors: sortedKeys(authorSet),
-		Users:   sortedKeys(userSet),
-		DateMin: dateMin,
-		DateMax: dateMax,
+		Repos:           sortedKeys(repoSet),
+		Authors:         sortedKeys(authorSet),
+		Users:           sortedKeys(userSet),
+		ExcludedAuthors: excludedAuthors,
+		DateMin:         dateMin,
+		DateMax:         dateMax,
 	}
 }
 

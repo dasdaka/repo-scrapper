@@ -120,7 +120,7 @@ func Serve(cfg util.Config) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/meta", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, BuildMeta(store.Activities(), store.BotSet()))
+		writeJSON(w, BuildMeta(store.Activities(), store.BotSet(), store.ExcludedAuthors()))
 	})
 	mux.HandleFunc("/api/charts", func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)

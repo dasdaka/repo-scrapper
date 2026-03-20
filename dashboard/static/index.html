@@ -604,7 +604,10 @@ async function loadMeta() {
     populateSelect('reposFilter', meta.repos);
     const allUsers = [...new Set([...(meta.authors || []), ...(meta.users || [])])].sort();
     populateSelect('authorsFilter', allUsers);
-    populateSelect('excludeUsersFilter', allUsers);
+    populateSelect('excludeUsersFilter', meta.excludedAuthors || []);
+    // Pre-select all configured excluded authors
+    Array.from(document.getElementById('excludeUsersFilter').options)
+      .forEach(o => o.selected = true);
     if (meta.dateMin) document.getElementById('dateFrom').value = meta.dateMin;
     if (meta.dateMax) document.getElementById('dateTo').value = meta.dateMax;
     setStatus(`${meta.repos.length} repos · ${meta.authors.length} authors`);

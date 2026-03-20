@@ -220,7 +220,7 @@ func TestDeduplicatePRs(t *testing.T) {
 
 func TestBuildMeta(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
-		m := BuildMeta(nil, nil)
+		m := BuildMeta(nil, nil, nil)
 		if m.DateMin != "" || m.DateMax != "" {
 			t.Error("expected empty date bounds for empty input")
 		}
@@ -231,7 +231,7 @@ func TestBuildMeta(t *testing.T) {
 			{SrcRepo: "ws/repo-a", Author: "Alice", User: "Bob", Updated: date("2024-01-01")},
 			{SrcRepo: "ws/repo-b", Author: "Charlie", User: "Alice", Updated: date("2024-06-01")},
 		}
-		m := BuildMeta(rows, nil)
+		m := BuildMeta(rows, nil, nil)
 
 		if len(m.Repos) != 2 {
 			t.Errorf("want 2 repos, got %d", len(m.Repos))
@@ -251,7 +251,7 @@ func TestBuildMeta(t *testing.T) {
 			makeRow(2, "ws/r", "A", "approval", "B", date("2024-01-01")),
 			makeRow(3, "ws/r", "A", "approval", "B", date("2024-12-31")),
 		}
-		m := BuildMeta(rows, nil)
+		m := BuildMeta(rows, nil, nil)
 		if m.DateMin != "2024-01-01" {
 			t.Errorf("want DateMin=2024-01-01, got %q", m.DateMin)
 		}
@@ -265,7 +265,7 @@ func TestBuildMeta(t *testing.T) {
 			{SrcRepo: "ws/z-repo", Updated: date("2024-01-01")},
 			{SrcRepo: "ws/a-repo", Updated: date("2024-01-01")},
 		}
-		m := BuildMeta(rows, nil)
+		m := BuildMeta(rows, nil, nil)
 		if m.Repos[0] != "a-repo" || m.Repos[1] != "z-repo" {
 			t.Errorf("repos not sorted: %v", m.Repos)
 		}

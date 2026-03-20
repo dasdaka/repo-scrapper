@@ -55,7 +55,7 @@ func TestMetaHandler(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
 	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, BuildMeta(store.Activities(), nil))
+		writeJSON(w, BuildMeta(store.Activities(), nil, nil))
 	}).ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
