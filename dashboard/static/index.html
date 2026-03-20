@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitbucket PR Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3349;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --accent2: #22d3ee;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  /* Tab navigation */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    height: 100%;
+    align-items: center;
+    margin: 0 24px;
+  }
+
+  .tab {
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+  .tab:hover { color: var(--text); background: var(--surface2); opacity: 1; }
+  .tab.active { color: var(--text); background: var(--surface2); }
+
+  .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+  #status-badge {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* Filters */
+  .filters {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .filter-group label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .filter-group input[type="date"],
+  .filter-group select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    min-width: 140px;
+  }
+
+  .filter-group select[multiple] {
+    min-height: 34px;
+    max-height: 90px;
+  }
+
+  .filter-group input[type="date"]:focus,
+  .filter-group select:focus {
+    border-color: var(--accent);
+  }
+
+  .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding-bottom: 1px;
+  }
+
+  /* Main content */
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+
+  .card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .card-value.green { color: var(--green); }
+  .card-value.red   { color: var(--red); }
+  .card-value.cyan  { color: var(--accent2); }
+
+  /* Charts grid */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .chart-card.wide {
+    grid-column: 1 / -1;
+  }
+
+  .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 280px;
+  }
+
+  /* Table */
+  .table-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .table-info { font-size: 12px; color: var(--muted); }
+
+  .table-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--surface2);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-merged  { background: #1a3a2a; color: var(--green); }
+  .badge-open    { background: #1a2a3a; color: var(--accent2); }
+  .badge-declined { background: #3a1a1a; color: var(--red); }
+
+  .pagination {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .empty-state {
+    padding: 48px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .loading { opacity: 0.5; pointer-events: none; }
+
+  /* ── Scraper page ──────────────────────────────────────────────────────── */
+  #page-scraper { padding: 24px; max-width: 1000px; margin: 0 auto; }
+
+  .scraper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .scraper-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .scraper-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .scraper-card-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  .scraper-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+  }
+
+  .run-status {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .status-idle    { color: var(--muted); }
+  .status-running { color: var(--yellow); }
+  .status-done    { color: var(--green); }
+  .status-error   { color: var(--red); }
+
+  /* Log panel */
+  .log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .log-panel-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .log-panel-header span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .log-output {
+    height: 320px;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .log-line { color: var(--text); }
+  .log-error { color: var(--red); }
+  .log-warn  { color: var(--yellow); }
+  .log-sep   { color: var(--muted); border-top: 1px solid var(--border); margin: 6px 0; padding-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9679; Bitbucket <span>PR Dashboard</span></h1>
+  <nav class="tabs">
+    <button class="tab active" id="tab-dashboard" onclick="showTab('dashboard')">Dashboard</button>
+    <button class="tab" id="tab-scraper" onclick="showTab('scraper')">Scraper</button>
+  </nav>
+  <div class="header-actions">
+    <span id="status-badge">loading...</span>
+    <button class="secondary" onclick="reloadData()">&#8635; Reload Data</button>
+  </div>
+</header>
+
+<!-- ── Dashboard page ──────────────────────────────────────────────────── -->
+<div id="page-dashboard">
+  <div class="filters">
+    <div class="filter-group">
+      <label>Date From</label>
+      <input type="date" id="dateFrom">
+    </div>
+    <div class="filter-group">
+      <label>Date To</label>
+      <input type="date" id="dateTo">
+    </div>
+    <div class="filter-group">
+      <label>Repositories</label>
+      <select id="reposFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+    </div>
+    <div class="filter-group">
+      <label>Authors</label>
+      <select id="authorsFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+    </div>
+    <div class="filter-actions">
+      <button onclick="applyFilters()">Apply Filters</button>
+      <button class="secondary" onclick="clearFilters()">Clear</button>
+    </div>
+  </div>
+
+  <main>
+    <div class="summary-grid">
+      <div class="card"><div class="card-label">Total PRs</div><div class="card-value" id="s-prs">—</div></div>
+      <div class="card"><div class="card-label">Lines Added</div><div class="card-value green" id="s-added">—</div></div>
+      <div class="card"><div class="card-label">Lines Removed</div><div class="card-value red" id="s-removed">—</div></div>
+      <div class="card"><div class="card-label">Total Changed</div><div class="card-value cyan" id="s-changed">—</div></div>
+      <div class="card"><div class="card-label">Unique Authors</div><div class="card-value" id="s-authors">—</div></div>
+      <div class="card"><div class="card-label">Repositories</div><div class="card-value" id="s-repos">—</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">PR Count by Author</div>
+        <div class="chart-wrap"><canvas id="chart-pr-author"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Code Changes by Author</div>
+        <div class="chart-wrap"><canvas id="chart-code-author"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <div class="chart-title">Review Activity by User (Approvals vs Comments)</div>
+        <div class="chart-wrap"><canvas id="chart-activity-user"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">PR Count by Month</div>
+        <div class="chart-wrap"><canvas id="chart-pr-month"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Code Changes by Repository</div>
+        <div class="chart-wrap"><canvas id="chart-code-repo"></canvas></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-header">
+        <h2>Pull Requests</h2>
+        <span class="table-info" id="table-info"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Repository</th>
+              <th>Title</th>
+              <th>Author</th>
+              <th>State</th>
+              <th>Updated</th>
+              <th>+Lines</th>
+              <th>-Lines</th>
+              <th>Files</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <button class="secondary" id="btn-prev" onclick="changePage(-1)">&#8592; Prev</button>
+        <span id="page-info">—</span>
+        <button class="secondary" id="btn-next" onclick="changePage(1)">Next &#8594;</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Scraper page ────────────────────────────────────────────────────── -->
+<div id="page-scraper" style="display:none">
+  <div class="scraper-grid">
+    <div class="scraper-card">
+      <div class="scraper-card-title">1 · Fetch Raw Data</div>
+      <div class="scraper-card-desc">Pull the latest pull requests, activity, diff stats, comments, commits, and statuses from the Bitbucket API and store them in the database.</div>
+      <div class="scraper-card-footer">
+        <span class="run-status status-idle" id="status-scrape">idle</span>
+        <button id="btn-scrape" onclick="runOp('scrape')">Run Scrape</button>
+      </div>
+    </div>
+    <div class="scraper-card">
+      <div class="scraper-card-title">2 · Aggregate</div>
+      <div class="scraper-card-desc">Read the raw database tables and rebuild the <code style="color:var(--accent2)">pr_report</code> summary table used by the dashboard charts and PR table.</div>
+      <div class="scraper-card-footer">
+        <span class="run-status status-idle" id="status-aggregate">idle</span>
+        <button id="btn-aggregate" onclick="runOp('aggregate')">Run Aggregate</button>
+      </div>
+    </div>
+    <div class="scraper-card">
+      <div class="scraper-card-title">3 · Export CSV</div>
+      <div class="scraper-card-desc">Write one CSV file per repository from the aggregated report data. Requires <code style="color:var(--accent2)">csv_export_path</code> to be set in config.</div>
+      <div class="scraper-card-footer">
+        <span class="run-status status-idle" id="status-export">idle</span>
+        <button id="btn-export" onclick="runOp('export')">Run Export</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-panel-header">
+      <span>Output Log</span>
+      <button class="secondary" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-output" id="log-output"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let currentPage = 1;
+const pageSize = 20;
+let totalRows = 0;
+
+// Chart instances (reused on updates)
+const charts = {};
+
+// ── Chart.js defaults ──────────────────────────────────────────────────────
+Chart.defaults.color = '#8892a4';
+Chart.defaults.borderColor = '#2e3349';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 12;
+
+const COLORS = {
+  purple:  '#6366f1',
+  cyan:    '#22d3ee',
+  green:   '#34d399',
+  red:     '#f87171',
+  yellow:  '#fbbf24',
+  orange:  '#fb923c',
+  pink:    '#f472b6',
+  blue:    '#60a5fa',
+};
+
+function palette(n) {
+  const base = Object.values(COLORS);
+  return Array.from({ length: n }, (_, i) => base[i % base.length]);
+}
+
+// ── Tab navigation ─────────────────────────────────────────────────────────
+function showTab(name) {
+  document.getElementById('page-dashboard').style.display = name === 'dashboard' ? '' : 'none';
+  document.getElementById('page-scraper').style.display   = name === 'scraper'   ? '' : 'none';
+  document.getElementById('tab-dashboard').classList.toggle('active', name === 'dashboard');
+  document.getElementById('tab-scraper').classList.toggle('active',   name === 'scraper');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadMeta();
+  await refresh();
+});
+
+async function loadMeta() {
+  try {
+    const meta = await fetchJSON('/api/meta');
+    populateSelect('reposFilter', meta.repos);
+    populateSelect('authorsFilter', meta.authors);
+    if (meta.dateMin) document.getElementById('dateFrom').value = meta.dateMin;
+    if (meta.dateMax) document.getElementById('dateTo').value = meta.dateMax;
+    setStatus(`${meta.repos.length} repos · ${meta.authors.length} authors`);
+  } catch (e) {
+    setStatus('No data loaded');
+  }
+}
+
+function populateSelect(id, items) {
+  const el = document.getElementById(id);
+  el.innerHTML = items.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+function getFilterParams() {
+  const params = new URLSearchParams();
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  if (from) params.set('dateFrom', from);
+  if (to)   params.set('dateTo', to);
+
+  const repos   = selectedValues('reposFilter');
+  const authors = selectedValues('authorsFilter');
+  repos.forEach(r => params.append('repos', r));
+  authors.forEach(a => params.append('authors', a));
+  return params;
+}
+
+function selectedValues(id) {
+  return Array.from(document.getElementById(id).selectedOptions).map(o => o.value);
+}
+
+function applyFilters() {
+  currentPage = 1;
+  refresh();
+}
+
+function clearFilters() {
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  ['reposFilter','authorsFilter'].forEach(id => {
+    Array.from(document.getElementById(id).options).forEach(o => o.selected = false);
+  });
+  currentPage = 1;
+  refresh();
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+async function refresh() {
+  const params = getFilterParams();
+  await Promise.all([
+    loadCharts(params),
+    loadTable(params),
+  ]);
+}
+
+async function loadCharts(params) {
+  try {
+    const data = await fetchJSON('/api/charts?' + params);
+    renderSummary(data.summary);
+    renderBarChart('chart-pr-author', data.prCountByAuthor.map(d => d.label), data.prCountByAuthor.map(d => d.value), COLORS.purple);
+    renderStackedBar('chart-code-author', data.codeChangesByAuthor, ['added','removed'], [COLORS.green, COLORS.red], ['+Lines', '-Lines']);
+    renderStackedBar('chart-activity-user', data.activityByUser, ['approval','comment'], [COLORS.cyan, COLORS.yellow], ['Approvals', 'Comments']);
+    renderBarChart('chart-pr-month', data.prCountByMonth.map(d => d.label), data.prCountByMonth.map(d => d.value), COLORS.blue);
+    renderStackedBar('chart-code-repo', data.codeChangesByRepo, ['added','removed'], [COLORS.green, COLORS.red], ['+Lines', '-Lines']);
+  } catch (e) {
+    console.error('Charts error:', e);
+  }
+}
+
+async function loadTable(params) {
+  params = new URLSearchParams(params.toString());
+  params.set('page', currentPage);
+  params.set('pageSize', pageSize);
+  try {
+    const data = await fetchJSON('/api/table?' + params);
+    totalRows = data.total;
+    renderTable(data.data);
+    document.getElementById('table-info').textContent = `${data.total} pull requests`;
+    document.getElementById('page-info').textContent =
+      `Page ${currentPage} of ${Math.max(1, Math.ceil(data.total / pageSize))}`;
+    document.getElementById('btn-prev').disabled = currentPage <= 1;
+    document.getElementById('btn-next').disabled = currentPage >= Math.ceil(data.total / pageSize);
+  } catch (e) {
+    console.error('Table error:', e);
+  }
+}
+
+// ── Summary ────────────────────────────────────────────────────────────────
+function renderSummary(s) {
+  document.getElementById('s-prs').textContent     = fmt(s.totalPRs);
+  document.getElementById('s-added').textContent   = fmt(s.totalAdded);
+  document.getElementById('s-removed').textContent = fmt(s.totalRemoved);
+  document.getElementById('s-changed').textContent = fmt(s.totalChanged);
+  document.getElementById('s-authors').textContent = fmt(s.uniqueAuthors);
+  document.getElementById('s-repos').textContent   = fmt(s.uniqueRepos);
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+function renderBarChart(id, labels, values, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  if (charts[id]) {
+    charts[id].data.labels = labels;
+    charts[id].data.datasets[0].data = values;
+    charts[id].data.datasets[0].backgroundColor = palette(labels.length);
+    charts[id].update();
+    return;
+  }
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: palette(labels.length), borderRadius: 4, borderSkipped: false }]
+    },
+    options: chartOptions({ legend: false })
+  });
+}
+
+function renderStackedBar(id, rows, keys, colors, legendLabels) {
+  const labels = rows.map(r => r.label);
+  const datasets = keys.map((k, i) => ({
+    label: legendLabels[i],
+    data: rows.map(r => r[k] || 0),
+    backgroundColor: colors[i],
+    borderRadius: 2,
+  }));
+  const ctx = document.getElementById(id).getContext('2d');
+  if (charts[id]) {
+    charts[id].data.labels = labels;
+    charts[id].data.datasets = datasets;
+    charts[id].update();
+    return;
+  }
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: chartOptions({ stacked: true, legend: true })
+  });
+}
+
+function chartOptions({ stacked = false, legend = false } = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: legend, position: 'top', labels: { boxWidth: 12, padding: 16 } },
+      tooltip: {
+        backgroundColor: '#1a1d27',
+        borderColor: '#2e3349',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#8892a4',
+      }
+    },
+    scales: {
+      x: { stacked, grid: { display: false }, ticks: { maxRotation: 35 } },
+      y: { stacked, grid: { color: '#2e3349' }, ticks: { precision: 0 } }
+    }
+  };
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable(prs) {
+  const tbody = document.getElementById('table-body');
+  if (!prs || prs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No pull requests match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = prs.map(pr => `
+    <tr>
+      <td style="color:var(--muted)">#${pr.id}</td>
+      <td>${esc(pr.srcRepo)}</td>
+      <td title="${esc(pr.title)}">${esc(truncate(pr.title, 50))}</td>
+      <td>${esc(pr.author)}</td>
+      <td><span class="badge badge-${pr.state.toLowerCase()}">${pr.state}</span></td>
+      <td style="color:var(--muted)">${pr.updated}</td>
+      <td style="color:var(--green)">+${fmt(pr.added)}</td>
+      <td style="color:var(--red)">-${fmt(pr.removed)}</td>
+      <td style="color:var(--muted)">${pr.fileChanged}</td>
+    </tr>
+  `).join('');
+}
+
+function changePage(delta) {
+  const maxPage = Math.ceil(totalRows / pageSize);
+  currentPage = Math.max(1, Math.min(maxPage, currentPage + delta));
+  loadTable(getFilterParams());
+}
+
+// ── Reload ─────────────────────────────────────────────────────────────────
+async function reloadData() {
+  setStatus('reloading...');
+  try {
+    const r = await fetchJSON('/api/reload', { method: 'POST' });
+    setStatus(`${r.rows} rows loaded`);
+    await loadMeta();
+    await refresh();
+  } catch (e) {
+    setStatus('reload failed');
+  }
+}
+
+// ── Scraper ────────────────────────────────────────────────────────────────
+function runOp(op) {
+  const btn = document.getElementById('btn-' + op);
+  btn.disabled = true;
+  setRunStatus(op, 'running');
+  appendLog('--- ' + op + ' started ---', 'sep');
+
+  const es = new EventSource('/api/run/' + op);
+
+  es.onmessage = (e) => {
+    const line = e.data;
+    if (line === '[DONE]') {
+      es.close();
+      btn.disabled = false;
+      // status is already set by individual lines; only set done if no error was seen
+      const el = document.getElementById('status-' + op);
+      if (!el.classList.contains('status-error')) {
+        setRunStatus(op, 'done');
+      }
+      return;
+    }
+    if (line.startsWith('ERROR:')) {
+      appendLog(line, 'error');
+      setRunStatus(op, 'error');
+    } else if (line.startsWith('WARNING:')) {
+      appendLog(line, 'warn');
+    } else {
+      appendLog(line, '');
+    }
+    // After aggregate or scrape completes successfully, refresh dashboard data
+    if (line === 'Done.' && (op === 'scrape' || op === 'aggregate')) {
+      loadMeta().then(() => refresh());
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    btn.disabled = false;
+    setRunStatus(op, 'error');
+    appendLog('Connection lost or operation ended.', 'warn');
+  };
+}
+
+function setRunStatus(op, status) {
+  const el = document.getElementById('status-' + op);
+  el.textContent = status;
+  el.className = 'run-status status-' + status;
+}
+
+function appendLog(line, type) {
+  const container = document.getElementById('log-output');
+  const div = document.createElement('div');
+  div.className = 'log-line' + (type ? ' log-' + type : '');
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  div.textContent = '[' + ts + '] ' + line;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-output').innerHTML = '';
+  ['scrape', 'aggregate', 'export'].forEach(op => setRunStatus(op, 'idle'));
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function fmt(n) {
+  if (n == null) return '—';
+  return n.toLocaleString();
+}
+
+function truncate(s, n) {
+  return s && s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setStatus(msg) {
+  document.getElementById('status-badge').textContent = msg;
+}
+</script>
+</body>
+</html>

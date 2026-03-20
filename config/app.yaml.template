@@ -1,13 +1,37 @@
 bitbucket:
     token: Bearer TOKEN
     workspace: WORKSPACE
-    repo_list: 
+    repo_list:
         - REPO
-    pr_page_len: 50
-    activity_page_len: 50
-    max_page: 50
-    query_filter: updated_on+%3E+2023-08-03
-    pull_request_url: https://api.bitbucket.org/2.0/repositories/%s/%s/pullrequests?page=%d&pagelen=%d&sort=-updated_on&q=%s
+
+    # scrape_period controls the lookback window for each run.
+    #   daily   — PRs updated since yesterday         (updated_on >= "YYYY-MM-DD")
+    #   monthly — PRs updated since the 1st of the month
+    #   all     — no date restriction (full history; can be slow)
+    scrape_period: monthly
+
+    # query_filter is an optional extra Bitbucket query clause.
+    # It is AND-ed with the date filter produced by scrape_period.
+    # Leave empty to return all states, or filter by state:
+    #   'state="MERGED"'
+    #   'state="MERGED" OR state="DECLINED"'
+    query_filter: ""
+
+    # pull_request_url overrides the default Bitbucket Cloud endpoint.
+    # Must contain exactly three %s verbs: workspace, repo-slug, q (query string).
+    # Leave empty to use the default:
+    #   https://api.bitbucket.org/2.0/repositories/%s/%s/pullrequests?pagelen=50&sort=-updated_on&q=%s
+    pull_request_url: ""
 
 report:
-    activity_format_path: activity.csv
+    # db_dsn is the PostgreSQL connection string.
+    # Format: postgres://user:password@host:port/dbname?sslmode=disable
+    db_dsn: "postgres://postgres:postgres@localhost:5432/repo_scrapper?sslmode=disable"
+
+    # csv_export_path is optional. When set, the `export` command writes one CSV
+    # per repo. Use a single %s placeholder for the repo name.
+    # Leave empty to skip CSV export entirely.
+    csv_export_path: ""
+
+dashboard:
+    port: 8080
