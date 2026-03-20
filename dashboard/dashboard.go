@@ -53,10 +53,11 @@ type PRRow struct {
 
 // FilterParams carries parsed query parameters.
 type FilterParams struct {
-	DateFrom time.Time
-	DateTo   time.Time
-	Repos    []string
-	Authors  []string
+	DateFrom     time.Time
+	DateTo       time.Time
+	Repos        []string
+	Authors      []string // include filter: matches Author OR User
+	ExcludeUsers []string // exclude filter: drops rows where Author OR User matches
 }
 
 // DashboardStore holds in-memory data loaded from the pr_report DB table.
@@ -143,12 +144,16 @@ func shortRepo(fullName string) string {
 }
 
 func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) []ActivityRow {
-	repoSet := toSet(p.Repos)
-	authorSet := toSet(p.Authors)
+	repoSet      := toSet(p.Repos)
+	authorSet    := toSet(p.Authors)
+	excludeSet   := toSet(p.ExcludeUsers)
 
 	var out []ActivityRow
 	for _, r := range rows {
 		if bots[r.Author] || bots[r.User] {
+			continue
+		}
+		if len(excludeSet) > 0 && (excludeSet[r.Author] || excludeSet[r.User]) {
 			continue
 		}
 		if !p.DateFrom.IsZero() && r.Updated.Before(p.DateFrom) {
@@ -160,7 +165,8 @@ func filterActivities(rows []ActivityRow, p FilterParams, bots map[string]bool) 
 		if len(repoSet) > 0 && !repoSet[shortRepo(r.SrcRepo)] {
 			continue
 		}
-		if len(authorSet) > 0 && !authorSet[r.Author] {
+		// Authors filter matches on either PR author or activity user.
+		if len(authorSet) > 0 && !authorSet[r.Author] && !authorSet[r.User] {
 			continue
 		}
 		out = append(out, r)

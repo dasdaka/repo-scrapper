@@ -445,8 +445,12 @@
       <select id="reposFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
     </div>
     <div class="filter-group">
-      <label>Authors</label>
+      <label>Author / User</label>
       <select id="authorsFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+    </div>
+    <div class="filter-group">
+      <label>Exclude</label>
+      <select id="excludeUsersFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
     </div>
     <div class="filter-actions">
       <button onclick="applyFilters()">Apply Filters</button>
@@ -598,7 +602,9 @@ async function loadMeta() {
   try {
     const meta = await fetchJSON('/api/meta');
     populateSelect('reposFilter', meta.repos);
-    populateSelect('authorsFilter', meta.authors);
+    const allUsers = [...new Set([...(meta.authors || []), ...(meta.users || [])])].sort();
+    populateSelect('authorsFilter', allUsers);
+    populateSelect('excludeUsersFilter', allUsers);
     if (meta.dateMin) document.getElementById('dateFrom').value = meta.dateMin;
     if (meta.dateMax) document.getElementById('dateTo').value = meta.dateMax;
     setStatus(`${meta.repos.length} repos · ${meta.authors.length} authors`);
@@ -620,10 +626,12 @@ function getFilterParams() {
   if (from) params.set('dateFrom', from);
   if (to)   params.set('dateTo', to);
 
-  const repos   = selectedValues('reposFilter');
-  const authors = selectedValues('authorsFilter');
-  repos.forEach(r => params.append('repos', r));
-  authors.forEach(a => params.append('authors', a));
+  const repos    = selectedValues('reposFilter');
+  const authors  = selectedValues('authorsFilter');
+  const excludes = selectedValues('excludeUsersFilter');
+  repos.forEach(r    => params.append('repos', r));
+  authors.forEach(a  => params.append('authors', a));
+  excludes.forEach(e => params.append('excludeUsers', e));
   return params;
 }
 
@@ -639,7 +647,7 @@ function applyFilters() {
 function clearFilters() {
   document.getElementById('dateFrom').value = '';
   document.getElementById('dateTo').value = '';
-  ['reposFilter','authorsFilter'].forEach(id => {
+  ['reposFilter','authorsFilter','excludeUsersFilter'].forEach(id => {
     Array.from(document.getElementById(id).options).forEach(o => o.selected = false);
   });
   currentPage = 1;

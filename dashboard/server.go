@@ -191,6 +191,7 @@ func parseFilters(r *http.Request) FilterParams {
 	}
 	p.Repos = filterEmpty(q["repos"])
 	p.Authors = filterEmpty(q["authors"])
+	p.ExcludeUsers = filterEmpty(q["excludeUsers"])
 	return p
 }
 
