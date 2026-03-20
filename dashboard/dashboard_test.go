@@ -275,7 +275,7 @@ func TestBuildMeta(t *testing.T) {
 // --- BuildCharts ---
 
 func TestBuildCharts_Empty(t *testing.T) {
-	c := BuildCharts(nil, nil)
+	c := BuildCharts(nil, nil, FilterParams{})
 	if c.Summary.TotalPRs != 0 {
 		t.Error("expected 0 PRs for empty input")
 	}
@@ -287,7 +287,7 @@ func TestBuildCharts_Summary(t *testing.T) {
 		{ID: 1, SrcRepo: "ws/repo-a", Author: "Alice", Added: 100, Removed: 20, Total: 120, Updated: date("2024-01-01"), Type: "pullrequest_comment", User: "Carol"},
 		{ID: 2, SrcRepo: "ws/repo-b", Author: "Dave", Added: 50, Removed: 10, Total: 60, Updated: date("2024-02-01"), Type: "approval", User: "Alice"},
 	}
-	c := BuildCharts(rows, nil)
+	c := BuildCharts(rows, nil, FilterParams{})
 
 	if c.Summary.TotalPRs != 2 {
 		t.Errorf("want TotalPRs=2, got %d", c.Summary.TotalPRs)
@@ -309,7 +309,7 @@ func TestBuildCharts_PRCountByAuthor(t *testing.T) {
 		{ID: 2, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 1, Updated: date("2024-01-01")},
 		{ID: 3, Author: "Bob", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 1, Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows, nil)
+	c := BuildCharts(rows, nil, FilterParams{})
 
 	byAuthor := map[string]int{}
 	for _, lv := range c.PRCountByAuthor {
@@ -326,7 +326,7 @@ func TestBuildCharts_ActivityByUser(t *testing.T) {
 		{ID: 1, Author: "A", SrcRepo: "ws/r", Type: "pullrequest_comment", User: "Bob", Updated: date("2024-01-01")},
 		{ID: 1, Author: "A", SrcRepo: "ws/r", Type: "pullrequest_comment", User: "Carol", Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows, nil)
+	c := BuildCharts(rows, nil, FilterParams{})
 
 	byUser := map[string]ActivityBreakdown{}
 	for _, ab := range c.ActivityByUser {
@@ -346,7 +346,7 @@ func TestBuildCharts_PRCountByMonth(t *testing.T) {
 		{ID: 2, Author: "A", SrcRepo: "ws/r", Type: "approval", User: "X", Updated: date("2024-01-20"), Added: 1},
 		{ID: 3, Author: "A", SrcRepo: "ws/r", Type: "approval", User: "X", Updated: date("2024-02-10"), Added: 1},
 	}
-	c := BuildCharts(rows, nil)
+	c := BuildCharts(rows, nil, FilterParams{})
 
 	byMonth := map[string]int{}
 	for _, lv := range c.PRCountByMonth {
@@ -363,7 +363,7 @@ func TestBuildCharts_SortOrder(t *testing.T) {
 		{ID: 2, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 100, Total: 100, Updated: date("2024-01-01")},
 		{ID: 3, Author: "Alice", SrcRepo: "ws/r", Type: "approval", User: "X", Added: 100, Total: 100, Updated: date("2024-01-01")},
 	}
-	c := BuildCharts(rows, nil)
+	c := BuildCharts(rows, nil, FilterParams{})
 
 	// PRCountByAuthor: Alice(2) before Bob(1)
 	if c.PRCountByAuthor[0].Label != "Alice" {

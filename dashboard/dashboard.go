@@ -261,8 +261,28 @@ type ChartsResponse struct {
 
 // BuildCharts aggregates filtered activity rows into chart data.
 // bots is an optional set of excluded user names; pass nil to include everyone.
-func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
-	prs := deduplicatePRs(rows)
+// p controls per-chart field-specific filtering:
+//   - PR Count / Code Changes / Summary / PR by Month / Changes by Repo →
+//     Authors and ExcludeUsers are matched against the Author field only.
+//   - Review Activity by User →
+//     Authors and ExcludeUsers are matched against the User field only.
+func BuildCharts(rows []ActivityRow, bots map[string]bool, p FilterParams) ChartsResponse {
+	authorSet  := toSet(p.Authors)
+	excludeSet := toSet(p.ExcludeUsers)
+
+	// prRows: rows whose PR Author passes the include/exclude filters.
+	var prRows []ActivityRow
+	for _, r := range rows {
+		if len(authorSet) > 0 && !authorSet[r.Author] {
+			continue
+		}
+		if excludeSet[r.Author] {
+			continue
+		}
+		prRows = append(prRows, r)
+	}
+
+	prs := deduplicatePRs(prRows)
 
 	authors := make(map[string]bool)
 	repos := make(map[string]bool)
@@ -290,9 +310,16 @@ func BuildCharts(rows []ActivityRow, bots map[string]bool) ChartsResponse {
 		codeByAuthor[pr.Author].Total += pr.Total
 	}
 
+	// actByUser: rows whose activity User passes the include/exclude filters.
 	actByUser := make(map[string]*ActivityBreakdown)
 	for _, r := range rows {
 		if r.User == "" || bots[r.User] {
+			continue
+		}
+		if len(authorSet) > 0 && !authorSet[r.User] {
+			continue
+		}
+		if excludeSet[r.User] {
 			continue
 		}
 		if _, ok := actByUser[r.User]; !ok {

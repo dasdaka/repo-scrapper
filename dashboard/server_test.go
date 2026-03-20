@@ -92,7 +92,7 @@ func TestChartsHandler(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/charts", nil)
 	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)
-		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, nil), nil))
+		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, nil), nil, params))
 	}).ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
@@ -115,7 +115,7 @@ func TestChartsHandler_WithRepoFilter(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/charts?repos=repo-a", nil)
 	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)
-		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, nil), nil))
+		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, nil), nil, params))
 	}).ServeHTTP(w, r)
 
 	var charts ChartsResponse

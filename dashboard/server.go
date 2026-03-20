@@ -124,7 +124,11 @@ func Serve(cfg util.Config) error {
 	})
 	mux.HandleFunc("/api/charts", func(w http.ResponseWriter, r *http.Request) {
 		params := parseFilters(r)
-		writeJSON(w, BuildCharts(filterActivities(store.Activities(), params, store.BotSet()), store.BotSet()))
+		// Pre-filter by date, repo, and bots only; author/user filtering is
+		// applied per-chart inside BuildCharts.
+		dateRepoParams := FilterParams{DateFrom: params.DateFrom, DateTo: params.DateTo, Repos: params.Repos}
+		rows := filterActivities(store.Activities(), dateRepoParams, store.BotSet())
+		writeJSON(w, BuildCharts(rows, store.BotSet(), params))
 	})
 	mux.HandleFunc("/api/table", tableHandler(store))
 	mux.HandleFunc("/api/reload", func(w http.ResponseWriter, r *http.Request) {
