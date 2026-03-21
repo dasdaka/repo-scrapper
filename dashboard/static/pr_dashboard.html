@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pull Requests — Developer Productivity</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3349;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --accent2: #22d3ee;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 0;
+  }
+
+  .brand {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .brand span { color: var(--accent); }
+  .brand .dot { color: var(--accent2); font-size: 10px; }
+
+  .nav-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 16px;
+    flex-shrink: 0;
+  }
+
+  .top-nav {
+    display: flex;
+    gap: 4px;
+  }
+  .top-nav a {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .top-nav a:hover { color: var(--text); background: var(--surface2); }
+  .top-nav a.active { color: var(--accent); border-color: var(--accent); background: rgba(99,102,241,.08); }
+
+  .sub-nav {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .sub-nav a {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    transition: all .15s;
+  }
+  .sub-nav a:hover { color: var(--text); background: var(--surface2); }
+  .sub-nav a.active { color: var(--text); background: var(--surface2); }
+
+  .header-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: 16px;
+    flex-shrink: 0;
+  }
+
+  #status-badge {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* Filters */
+  .filters {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-group label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .filter-group input[type="date"],
+  .filter-group select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    min-width: 140px;
+  }
+  .filter-group select[multiple] { min-height: 34px; max-height: 90px; }
+  .filter-group input[type="date"]:focus,
+  .filter-group select:focus { border-color: var(--accent); }
+
+  .filter-actions { display: flex; gap: 8px; align-items: flex-end; padding-bottom: 1px; }
+
+  /* Main content */
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .card-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 6px;
+  }
+  .card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+  .card-value.green { color: var(--green); }
+  .card-value.red   { color: var(--red); }
+  .card-value.cyan  { color: var(--accent2); }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* Table */
+  .table-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .table-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .table-info { font-size: 12px; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    background: var(--surface2);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 10px 16px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-merged   { background: #1a3a2a; color: var(--green); }
+  .badge-open     { background: #1a2a3a; color: var(--accent2); }
+  .badge-declined { background: #3a1a1a; color: var(--red); }
+
+  .pagination {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="/"><span class="dot">&#9679;</span> Developer <span>Productivity</span></a>
+  <div class="nav-sep"></div>
+  <nav class="top-nav">
+    <a href="/pull-requests" class="active">Pull Requests</a>
+    <a href="/pipelines">Pipelines</a>
+  </nav>
+  <nav class="sub-nav">
+    <a href="/pull-requests" class="active">Dashboard</a>
+    <a href="/pull-requests/scraper">Scraper</a>
+  </nav>
+  <div class="header-right">
+    <span id="status-badge">loading...</span>
+    <button class="secondary" onclick="reloadData()">&#8635; Reload</button>
+  </div>
+</header>
+
+<div class="filters">
+  <div class="filter-group">
+    <label>Date From</label>
+    <input type="date" id="dateFrom">
+  </div>
+  <div class="filter-group">
+    <label>Date To</label>
+    <input type="date" id="dateTo">
+  </div>
+  <div class="filter-group">
+    <label>Repositories</label>
+    <select id="reposFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+  </div>
+  <div class="filter-group">
+    <label>Author / User</label>
+    <select id="authorsFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+  </div>
+  <div class="filter-group">
+    <label>Exclude</label>
+    <select id="excludeUsersFilter" multiple title="Hold Ctrl/Cmd to select multiple"></select>
+  </div>
+  <div class="filter-actions">
+    <button onclick="applyFilters()">Apply Filters</button>
+    <button class="secondary" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<main>
+  <div class="summary-grid">
+    <div class="card"><div class="card-label">Total PRs</div><div class="card-value" id="s-prs">—</div></div>
+    <div class="card"><div class="card-label">Lines Added</div><div class="card-value green" id="s-added">—</div></div>
+    <div class="card"><div class="card-label">Lines Removed</div><div class="card-value red" id="s-removed">—</div></div>
+    <div class="card"><div class="card-label">Total Changed</div><div class="card-value cyan" id="s-changed">—</div></div>
+    <div class="card"><div class="card-label">Unique Authors</div><div class="card-value" id="s-authors">—</div></div>
+    <div class="card"><div class="card-label">Repositories</div><div class="card-value" id="s-repos">—</div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">PR Count by Author</div>
+      <div class="chart-wrap"><canvas id="chart-pr-author"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Code Changes by Author</div>
+      <div class="chart-wrap"><canvas id="chart-code-author"></canvas></div>
+    </div>
+    <div class="chart-card wide">
+      <div class="chart-title">Review Activity by User (Approvals vs Comments)</div>
+      <div class="chart-wrap"><canvas id="chart-activity-user"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">PR Count by Month</div>
+      <div class="chart-wrap"><canvas id="chart-pr-month"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Code Changes by Repository</div>
+      <div class="chart-wrap"><canvas id="chart-code-repo"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <h2>Pull Requests</h2>
+      <span class="table-info" id="table-info"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Repository</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>State</th>
+            <th>Updated</th>
+            <th>+Lines</th>
+            <th>-Lines</th>
+            <th>Files</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="secondary" id="btn-prev" onclick="changePage(-1)">&#8592; Prev</button>
+      <span id="page-info">—</span>
+      <button class="secondary" id="btn-next" onclick="changePage(1)">Next &#8594;</button>
+    </div>
+  </div>
+</main>
+
+<script>
+let currentPage = 1;
+const pageSize = 20;
+let totalRows = 0;
+const charts = {};
+
+Chart.defaults.color = '#8892a4';
+Chart.defaults.borderColor = '#2e3349';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 12;
+
+const COLORS = {
+  purple: '#6366f1', cyan: '#22d3ee', green: '#34d399',
+  red: '#f87171', yellow: '#fbbf24', orange: '#fb923c',
+  pink: '#f472b6', blue: '#60a5fa',
+};
+
+function palette(n) {
+  const base = Object.values(COLORS);
+  return Array.from({ length: n }, (_, i) => base[i % base.length]);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadMeta();
+  await refresh();
+});
+
+async function loadMeta() {
+  try {
+    const meta = await fetchJSON('/api/meta');
+    populateSelect('reposFilter', meta.repos);
+    const allUsers = [...new Set([...(meta.authors || []), ...(meta.users || [])])].sort();
+    populateSelect('authorsFilter', allUsers);
+    populateSelect('excludeUsersFilter', meta.excludedAuthors || []);
+    Array.from(document.getElementById('excludeUsersFilter').options).forEach(o => o.selected = true);
+    if (meta.dateMin) document.getElementById('dateFrom').value = meta.dateMin;
+    if (meta.dateMax) document.getElementById('dateTo').value = meta.dateMax;
+    setStatus(`${meta.repos.length} repos · ${meta.authors.length} authors`);
+  } catch (e) {
+    setStatus('No data loaded');
+  }
+}
+
+function populateSelect(id, items) {
+  const el = document.getElementById(id);
+  el.innerHTML = items.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
+function getFilterParams() {
+  const params = new URLSearchParams();
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  if (from) params.set('dateFrom', from);
+  if (to)   params.set('dateTo', to);
+  selectedValues('reposFilter').forEach(r    => params.append('repos', r));
+  selectedValues('authorsFilter').forEach(a  => params.append('authors', a));
+  selectedValues('excludeUsersFilter').forEach(e => params.append('excludeUsers', e));
+  return params;
+}
+
+function selectedValues(id) {
+  return Array.from(document.getElementById(id).selectedOptions).map(o => o.value);
+}
+
+function applyFilters() { currentPage = 1; refresh(); }
+
+function clearFilters() {
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  ['reposFilter','authorsFilter','excludeUsersFilter'].forEach(id => {
+    Array.from(document.getElementById(id).options).forEach(o => o.selected = false);
+  });
+  currentPage = 1;
+  refresh();
+}
+
+async function refresh() {
+  const params = getFilterParams();
+  await Promise.all([loadCharts(params), loadTable(params)]);
+}
+
+async function loadCharts(params) {
+  try {
+    const data = await fetchJSON('/api/charts?' + params);
+    renderSummary(data.summary);
+    renderBarChart('chart-pr-author', data.prCountByAuthor.map(d => d.label), data.prCountByAuthor.map(d => d.value), COLORS.purple);
+    renderStackedBar('chart-code-author', data.codeChangesByAuthor, ['added','removed'], [COLORS.green, COLORS.red], ['+Lines', '-Lines']);
+    renderStackedBar('chart-activity-user', data.activityByUser, ['approval','comment'], [COLORS.cyan, COLORS.yellow], ['Approvals', 'Comments']);
+    renderBarChart('chart-pr-month', data.prCountByMonth.map(d => d.label), data.prCountByMonth.map(d => d.value), COLORS.blue);
+    renderStackedBar('chart-code-repo', data.codeChangesByRepo, ['added','removed'], [COLORS.green, COLORS.red], ['+Lines', '-Lines']);
+  } catch (e) { console.error('Charts error:', e); }
+}
+
+async function loadTable(params) {
+  params = new URLSearchParams(params.toString());
+  params.set('page', currentPage);
+  params.set('pageSize', pageSize);
+  try {
+    const data = await fetchJSON('/api/table?' + params);
+    totalRows = data.total;
+    renderTable(data.data);
+    document.getElementById('table-info').textContent = `${data.total} pull requests`;
+    document.getElementById('page-info').textContent =
+      `Page ${currentPage} of ${Math.max(1, Math.ceil(data.total / pageSize))}`;
+    document.getElementById('btn-prev').disabled = currentPage <= 1;
+    document.getElementById('btn-next').disabled = currentPage >= Math.ceil(data.total / pageSize);
+  } catch (e) { console.error('Table error:', e); }
+}
+
+function renderSummary(s) {
+  document.getElementById('s-prs').textContent     = fmt(s.totalPRs);
+  document.getElementById('s-added').textContent   = fmt(s.totalAdded);
+  document.getElementById('s-removed').textContent = fmt(s.totalRemoved);
+  document.getElementById('s-changed').textContent = fmt(s.totalChanged);
+  document.getElementById('s-authors').textContent = fmt(s.uniqueAuthors);
+  document.getElementById('s-repos').textContent   = fmt(s.uniqueRepos);
+}
+
+function renderBarChart(id, labels, values, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  if (charts[id]) {
+    charts[id].data.labels = labels;
+    charts[id].data.datasets[0].data = values;
+    charts[id].data.datasets[0].backgroundColor = palette(labels.length);
+    charts[id].update();
+    return;
+  }
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: palette(labels.length), borderRadius: 4, borderSkipped: false }] },
+    options: chartOptions({ legend: false })
+  });
+}
+
+function renderStackedBar(id, rows, keys, colors, legendLabels) {
+  const labels = rows.map(r => r.label);
+  const datasets = keys.map((k, i) => ({
+    label: legendLabels[i],
+    data: rows.map(r => r[k] || 0),
+    backgroundColor: colors[i],
+    borderRadius: 2,
+  }));
+  const ctx = document.getElementById(id).getContext('2d');
+  if (charts[id]) {
+    charts[id].data.labels = labels;
+    charts[id].data.datasets = datasets;
+    charts[id].update();
+    return;
+  }
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: chartOptions({ stacked: true, legend: true })
+  });
+}
+
+function chartOptions({ stacked = false, legend = false } = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: legend, position: 'top', labels: { boxWidth: 12, padding: 16 } },
+      tooltip: {
+        backgroundColor: '#1a1d27', borderColor: '#2e3349', borderWidth: 1,
+        titleColor: '#e2e8f0', bodyColor: '#8892a4',
+      }
+    },
+    scales: {
+      x: { stacked, grid: { display: false }, ticks: { maxRotation: 35 } },
+      y: { stacked, grid: { color: '#2e3349' }, ticks: { precision: 0 } }
+    }
+  };
+}
+
+function renderTable(prs) {
+  const tbody = document.getElementById('table-body');
+  if (!prs || prs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:48px;color:var(--muted)">No pull requests match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = prs.map(pr => `
+    <tr>
+      <td style="color:var(--muted)">#${pr.id}</td>
+      <td>${esc(pr.srcRepo)}</td>
+      <td title="${esc(pr.title)}">${esc(truncate(pr.title, 50))}</td>
+      <td>${esc(pr.author)}</td>
+      <td><span class="badge badge-${pr.state.toLowerCase()}">${pr.state}</span></td>
+      <td style="color:var(--muted)">${pr.updated}</td>
+      <td style="color:var(--green)">+${fmt(pr.added)}</td>
+      <td style="color:var(--red)">-${fmt(pr.removed)}</td>
+      <td style="color:var(--muted)">${pr.fileChanged}</td>
+    </tr>
+  `).join('');
+}
+
+function changePage(delta) {
+  const maxPage = Math.ceil(totalRows / pageSize);
+  currentPage = Math.max(1, Math.min(maxPage, currentPage + delta));
+  loadTable(getFilterParams());
+}
+
+async function reloadData() {
+  setStatus('reloading...');
+  try {
+    const r = await fetchJSON('/api/reload', { method: 'POST' });
+    setStatus(`${r.rows} rows loaded`);
+    await loadMeta();
+    await refresh();
+  } catch (e) { setStatus('reload failed'); }
+}
+
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function fmt(n) { if (n == null) return '—'; return n.toLocaleString(); }
+function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : s; }
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setStatus(msg) { document.getElementById('status-badge').textContent = msg; }
+</script>
+</body>
+</html>

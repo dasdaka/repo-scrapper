@@ -20,43 +20,50 @@ func newTestClient(srv *httptest.Server, cfg BitbucketConfig) *Client {
 // --- buildQueryFilter ---
 
 func TestBuildQueryFilter(t *testing.T) {
-	t.Run("empty config returns empty string", func(t *testing.T) {
-		if got := buildQueryFilter(BitbucketConfig{}); got != "" {
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
+
+	t.Run("no dates no extra returns empty string", func(t *testing.T) {
+		if got := buildQueryFilter(time.Time{}, time.Time{}, ""); got != "" {
 			t.Errorf("want empty, got %q", got)
 		}
 	})
 
-	t.Run("daily adds updated_on filter", func(t *testing.T) {
-		got := buildQueryFilter(BitbucketConfig{ScrapePeriod: "daily"})
-		if !strings.HasPrefix(got, `updated_on >= "`) {
-			t.Errorf("want updated_on prefix, got %q", got)
+	t.Run("fromDate only produces created_on >= clause", func(t *testing.T) {
+		got := buildQueryFilter(from, time.Time{}, "")
+		want := `created_on >= "2026-01-01"`
+		if got != want {
+			t.Errorf("want %q, got %q", want, got)
 		}
 	})
 
-	t.Run("monthly uses first day of month", func(t *testing.T) {
-		got := buildQueryFilter(BitbucketConfig{ScrapePeriod: "monthly"})
-		if !strings.Contains(got, "-01\"") {
-			t.Errorf("want first-of-month date in filter, got %q", got)
+	t.Run("toDate only produces created_on <= clause", func(t *testing.T) {
+		got := buildQueryFilter(time.Time{}, to, "")
+		want := `created_on <= "2026-03-31"`
+		if got != want {
+			t.Errorf("want %q, got %q", want, got)
 		}
 	})
 
-	t.Run("query_filter appended after date filter", func(t *testing.T) {
-		got := buildQueryFilter(BitbucketConfig{
-			ScrapePeriod: "monthly",
-			QueryFilter:  `state="MERGED"`,
-		})
+	t.Run("both dates joined with AND", func(t *testing.T) {
+		got := buildQueryFilter(from, to, "")
+		want := `created_on >= "2026-01-01" AND created_on <= "2026-03-31"`
+		if got != want {
+			t.Errorf("want %q, got %q", want, got)
+		}
+	})
+
+	t.Run("extra filter appended after date clauses", func(t *testing.T) {
+		got := buildQueryFilter(from, to, `state="MERGED"`)
 		if !strings.Contains(got, " AND ") || !strings.HasSuffix(got, `state="MERGED"`) {
 			t.Errorf("unexpected combined filter: %q", got)
 		}
 	})
 
-	t.Run("all period uses only query_filter", func(t *testing.T) {
-		got := buildQueryFilter(BitbucketConfig{
-			ScrapePeriod: "all",
-			QueryFilter:  `state="OPEN"`,
-		})
+	t.Run("extra filter only when no dates", func(t *testing.T) {
+		got := buildQueryFilter(time.Time{}, time.Time{}, `state="OPEN"`)
 		if got != `state="OPEN"` {
-			t.Errorf("want only query_filter, got %q", got)
+			t.Errorf("want only extra filter, got %q", got)
 		}
 	})
 }
@@ -208,7 +215,7 @@ func TestFetchAllPages_FollowsNextLinks(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClientWithOptions(BitbucketConfig{Token: "Bearer t"}, WithHTTPDoer(srv.Client()))
-	prs, err := fetchAllPages[PullRequestData](context.Background(), c, srv.URL+"/prs")
+	prs, err := fetchAllPages[PullRequestData](context.Background(), c, srv.URL+"/prs", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
