@@ -18,18 +18,29 @@ type Config struct {
 }
 
 type BitbucketConfig struct {
-	Token      string   `mapstructure:"token"`
-	Workspace  string   `mapstructure:"workspace"`
-	RepoList   []string `mapstructure:"repo_list"`
-	// ScrapePeriod controls the lookback window: "daily", "monthly", or "all".
-	// When set to "daily" or "monthly", an updated_on filter is added automatically.
-	ScrapePeriod   string `mapstructure:"scrape_period"`
-	// QueryFilter is an optional extra Bitbucket query clause appended to the
-	// generated date filter (e.g. `state="MERGED" OR state="DECLINED"`).
-	QueryFilter    string `mapstructure:"query_filter"`
+	Token     string   `mapstructure:"token"`
+	Workspace string   `mapstructure:"workspace"`
+	RepoList  []string `mapstructure:"repo_list"`
+	// QueryFilter is an optional extra Bitbucket query clause appended after the
+	// date range filter (e.g. `state="MERGED" OR state="DECLINED"`).
+	// Date range is supplied at run-time via ScrapeRaw / ScrapePipelinesRaw;
+	// use this field only for non-date predicates.
+	QueryFilter string `mapstructure:"query_filter"`
 	// PullRequestURL overrides the default Bitbucket Cloud API endpoint.
 	// Must contain exactly three %s verbs: workspace, repo slug, query string.
 	PullRequestURL string `mapstructure:"pull_request_url"`
+	// ProductionEnvs is an optional list of deployment environment names to
+	// filter pipeline and deployment scraping (e.g. ["Production", "Production-DR"]).
+	// When non-empty, only deployments targeting a matching environment are stored,
+	// and only pipelines linked to those deployments are stored.
+	// Leave empty to scrape all environments.
+	ProductionEnvs []string `mapstructure:"production_envs"`
+	// ProductionRefs is an optional list of branch or tag names that represent
+	// production deployments (e.g. ["master", "main", "release/*"]).
+	// When set, the Deployment Frequency chart on the Pipelines dashboard counts
+	// successful pipeline runs on these refs as production deployments.
+	// Leave empty to hide the Deployment Frequency chart.
+	ProductionRefs []string `mapstructure:"production_refs"`
 }
 
 type ReportConfig struct {

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR Scraper — Developer Productivity</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3349;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --accent2: #22d3ee;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 0;
+  }
+
+  .brand {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .brand span { color: var(--accent); }
+  .brand .dot { color: var(--accent2); font-size: 10px; }
+
+  .nav-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 16px;
+    flex-shrink: 0;
+  }
+
+  .top-nav { display: flex; gap: 4px; }
+  .top-nav a {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .top-nav a:hover { color: var(--text); background: var(--surface2); }
+  .top-nav a.active { color: var(--accent); border-color: var(--accent); background: rgba(99,102,241,.08); }
+
+  .sub-nav { display: flex; gap: 4px; margin-left: auto; }
+  .sub-nav a {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    transition: all .15s;
+  }
+  .sub-nav a:hover { color: var(--text); background: var(--surface2); }
+  .sub-nav a.active { color: var(--text); background: var(--surface2); }
+
+  main { padding: 32px 24px; max-width: 900px; margin: 0 auto; }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .page-desc {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+
+  /* Date range inside card */
+  .card-date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .card-date-range label {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .card-date-range input[type="date"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 4px 8px;
+    outline: none;
+    transition: border-color .15s;
+    color-scheme: dark;
+    flex: 1;
+    min-width: 120px;
+  }
+  .card-date-range input[type="date"]:focus { border-color: var(--accent); }
+
+  .scraper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .scraper-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .scraper-card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .scraper-card-desc { font-size: 13px; color: var(--muted); line-height: 1.5; flex: 1; }
+
+  .scraper-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+  }
+
+  .run-status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .status-idle    { color: var(--muted); }
+  .status-running { color: var(--yellow); }
+  .status-done    { color: var(--green); }
+  .status-error   { color: var(--red); }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .log-panel-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .log-panel-header span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .log-output {
+    height: 400px;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .log-line  { color: var(--text); }
+  .log-error { color: var(--red); }
+  .log-warn  { color: var(--yellow); }
+  .log-sep   { color: var(--muted); border-top: 1px solid var(--border); margin: 6px 0; padding-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="/"><span class="dot">&#9679;</span> Developer <span>Productivity</span></a>
+  <div class="nav-sep"></div>
+  <nav class="top-nav">
+    <a href="/pull-requests" class="active">Pull Requests</a>
+    <a href="/pipelines">Pipelines</a>
+  </nav>
+  <nav class="sub-nav">
+    <a href="/pull-requests">Dashboard</a>
+    <a href="/pull-requests/scraper" class="active">Scraper</a>
+  </nav>
+</header>
+
+<main>
+  <h2>PR Scraper</h2>
+  <p class="page-desc">Fetch raw pull request data from the Bitbucket API and rebuild the summary report. Set the date range, run <strong>Scrape</strong> to pull the data, then <strong>Aggregate</strong> to refresh the dashboard.</p>
+
+  <div class="scraper-grid">
+    <div class="scraper-card">
+      <div class="scraper-card-title">1 · Fetch Raw Data</div>
+      <div class="scraper-card-desc">Pull pull requests created within the date range from the Bitbucket API, along with their activity, diff stats, comments, commits, statuses, and linked pipeline &amp; deployment data.</div>
+      <div class="card-date-range">
+        <label for="from-date">From</label>
+        <input type="date" id="from-date">
+        <label for="to-date">To</label>
+        <input type="date" id="to-date">
+      </div>
+      <div class="scraper-card-footer">
+        <span class="run-status status-idle" id="status-scrape">idle</span>
+        <button id="btn-scrape" onclick="runOp('scrape')">Run Scrape</button>
+      </div>
+    </div>
+    <div class="scraper-card">
+      <div class="scraper-card-title">2 · Aggregate</div>
+      <div class="scraper-card-desc">Read the raw database tables and rebuild the <code style="color:var(--accent2)">pr_report</code> and <code style="color:var(--accent2)">pipeline_report</code> summary tables used by the dashboard charts, PR table, and deployment-frequency panel.</div>
+      <div class="scraper-card-footer">
+        <span class="run-status status-idle" id="status-aggregate">idle</span>
+        <button id="btn-aggregate" onclick="runOp('aggregate')">Run Aggregate</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-panel-header">
+      <span>Output Log</span>
+      <button class="secondary" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-output" id="log-output"></div>
+  </div>
+</main>
+
+<script>
+// Default to first day of current month → today
+(function() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  document.getElementById('from-date').value = `${yyyy}-${mm}-01`;
+  document.getElementById('to-date').value   = `${yyyy}-${mm}-${dd}`;
+})();
+
+function buildScrapeURL(op) {
+  let url = '/api/run/' + op;
+  // Date range only applies to the scrape step, not aggregate
+  if (op === 'scrape') {
+    const fromDate = document.getElementById('from-date').value;
+    const toDate   = document.getElementById('to-date').value;
+    const params   = new URLSearchParams();
+    if (fromDate) params.set('fromDate', fromDate);
+    if (toDate)   params.set('toDate',   toDate);
+    if (params.toString()) url += '?' + params.toString();
+  }
+  return url;
+}
+
+function runOp(op) {
+  const btn = document.getElementById('btn-' + op);
+  btn.disabled = true;
+  setRunStatus(op, 'running');
+
+  const url = buildScrapeURL(op);
+  appendLog('--- ' + op + ' started' + (op === 'scrape' ? ' (' + describeRange() + ')' : '') + ' ---', 'sep');
+
+  const es = new EventSource(url);
+
+  es.onmessage = (e) => {
+    const line = e.data;
+    if (line === '[DONE]') {
+      es.close();
+      btn.disabled = false;
+      const el = document.getElementById('status-' + op);
+      if (!el.classList.contains('status-error')) setRunStatus(op, 'done');
+      return;
+    }
+    if (line.startsWith('ERROR:')) {
+      appendLog(line, 'error');
+      setRunStatus(op, 'error');
+    } else if (line.startsWith('WARNING:')) {
+      appendLog(line, 'warn');
+    } else {
+      appendLog(line, '');
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    btn.disabled = false;
+    setRunStatus(op, 'error');
+    appendLog('Connection lost or operation ended.', 'warn');
+  };
+}
+
+function describeRange() {
+  const from = document.getElementById('from-date').value || '*';
+  const to   = document.getElementById('to-date').value   || '*';
+  return from + ' → ' + to;
+}
+
+function setRunStatus(op, status) {
+  const el = document.getElementById('status-' + op);
+  el.textContent = status;
+  el.className = 'run-status status-' + status;
+}
+
+function appendLog(line, type) {
+  const container = document.getElementById('log-output');
+  const div = document.createElement('div');
+  div.className = 'log-line' + (type ? ' log-' + type : '');
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  div.textContent = '[' + ts + '] ' + line;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-output').innerHTML = '';
+  ['scrape', 'aggregate'].forEach(op => setRunStatus(op, 'idle'));
+}
+</script>
+</body>
+</html>

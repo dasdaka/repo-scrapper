@@ -1,35 +1,48 @@
-.PHONY: build run serve scrape aggregate all test clean help
+.PHONY: build run serve scrape aggregate scrape-pipelines aggregate-pipelines \
+        all-pipelines test clean help
 
 BINARY := app.exe
 
-## build       Compile the binary
+## build                Compile the binary
 build:
 	go build -o $(BINARY) ./cmd/app
 
-## serve       Build then start the web dashboard (http://localhost:8080)
+## serve                Build then start the web dashboard (http://localhost:8080)
 serve: build
 	./$(BINARY) serve
 
-## scrape      Build then fetch raw PR data from Bitbucket
+## scrape               Build then fetch raw PR data from Bitbucket
 scrape: build
 	./$(BINARY) scrape
 
-## aggregate   Build then rebuild pr_report from stored raw data
+## aggregate            Build then rebuild pr_report from stored raw data
 aggregate: build
 	./$(BINARY) aggregate
 
-## run         Build then run the full pipeline  scrape -> aggregate
+## run                  Build then run the full PR pipeline  scrape -> aggregate
 run: build
 	./$(BINARY) all
 
-## test        Run all tests
+## scrape-pipelines     Build then fetch raw pipeline + deployment data from Bitbucket
+scrape-pipelines: build
+	./$(BINARY) scrape-pipelines
+
+## aggregate-pipelines  Build then rebuild pipeline_report from stored raw data
+aggregate-pipelines: build
+	./$(BINARY) aggregate-pipelines
+
+## all-pipelines        Build then run the full pipeline cycle  scrape-pipelines -> aggregate-pipelines
+all-pipelines: build
+	./$(BINARY) all-pipelines
+
+## test                 Run all tests
 test:
 	go test ./...
 
-## clean       Remove the compiled binary
+## clean                Remove the compiled binary
 clean:
 	rm -f $(BINARY)
 
-## help        List available targets
+## help                 List available targets
 help:
 	@grep -E '^## ' Makefile | sed 's/## //'

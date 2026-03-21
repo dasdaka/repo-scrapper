@@ -33,4 +33,4 @@ go.work
 .claude/
 
 # Allow embedded static assets
-!dashboard/static/index.html
+!dashboard/static/*.html

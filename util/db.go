@@ -131,6 +131,63 @@ func CreateSchema(ctx context.Context, db *sql.DB) error {
 			updated_on    TEXT,
 			raw_json      TEXT NOT NULL
 		)`,
+		// Raw Bitbucket pipeline runs scraped from /pipelines.
+		`CREATE TABLE IF NOT EXISTS pipelines (
+			pipeline_uuid      TEXT NOT NULL,
+			repo               TEXT NOT NULL,
+			build_number       INTEGER DEFAULT 0,
+			run_number         INTEGER DEFAULT 0,
+			creator_name       TEXT    DEFAULT '',
+			creator_uuid       TEXT    DEFAULT '',
+			creator_account_id TEXT    DEFAULT '',
+			target_ref_type    TEXT    DEFAULT '',
+			target_ref_name    TEXT    DEFAULT '',
+			trigger_name       TEXT    DEFAULT '',
+			state_name         TEXT    DEFAULT '',
+			result_name        TEXT    DEFAULT '',
+			created_on         TEXT    DEFAULT '',
+			completed_on       TEXT    DEFAULT '',
+			build_seconds_used INTEGER DEFAULT 0,
+			raw_json           TEXT NOT NULL,
+			PRIMARY KEY (pipeline_uuid, repo)
+		)`,
+		// Raw Bitbucket deployment records scraped from /deployments.
+		`CREATE TABLE IF NOT EXISTS deployments (
+			deployment_uuid  TEXT NOT NULL,
+			repo             TEXT NOT NULL,
+			pipeline_uuid    TEXT DEFAULT '',
+			environment_uuid TEXT DEFAULT '',
+			environment_name TEXT DEFAULT '',
+			state_name       TEXT DEFAULT '',
+			status_name      TEXT DEFAULT '',
+			release_name     TEXT DEFAULT '',
+			created_on       TEXT DEFAULT '',
+			completed_on     TEXT DEFAULT '',
+			raw_json         TEXT NOT NULL,
+			PRIMARY KEY (deployment_uuid, repo)
+		)`,
+		// Aggregated pipeline report: one row per (pipeline, deployment environment).
+		// Pipelines with no deployment records appear with empty environment fields.
+		`CREATE TABLE IF NOT EXISTS pipeline_report (
+			id                BIGSERIAL PRIMARY KEY,
+			pipeline_uuid     TEXT    NOT NULL,
+			repo              TEXT    NOT NULL,
+			build_number      INTEGER DEFAULT 0,
+			run_number        INTEGER DEFAULT 0,
+			creator           TEXT    DEFAULT '',
+			target_ref_type   TEXT    DEFAULT '',
+			target_ref_name   TEXT    DEFAULT '',
+			trigger_name      TEXT    DEFAULT '',
+			state_name        TEXT    DEFAULT '',
+			result_name       TEXT    DEFAULT '',
+			environment_uuid  TEXT    DEFAULT '',
+			environment_name  TEXT    DEFAULT '',
+			deployment_state  TEXT    DEFAULT '',
+			deployment_status TEXT    DEFAULT '',
+			created_on        TEXT    DEFAULT '',
+			completed_on      TEXT    DEFAULT '',
+			duration_seconds  INTEGER DEFAULT 0
+		)`,
 		// Aggregated report: one row per non-update activity event per PR.
 		`CREATE TABLE IF NOT EXISTS pr_report (
 			id               BIGSERIAL PRIMARY KEY,
@@ -150,10 +207,27 @@ func CreateSchema(ctx context.Context, db *sql.DB) error {
 			added            INTEGER DEFAULT 0,
 			removed          INTEGER DEFAULT 0,
 			total            INTEGER DEFAULT 0,
-			activity_type    TEXT,
-			activity_user    TEXT,
-			activity_content TEXT
+			activity_type     TEXT,
+			activity_user     TEXT,
+			activity_content  TEXT,
+			pipeline_uuid     TEXT DEFAULT '',
+			environment_name  TEXT DEFAULT '',
+			deployment_state  TEXT DEFAULT '',
+			deployment_status TEXT DEFAULT ''
 		)`,
+		// Junction table linking pull requests to their associated pipeline runs.
+		`CREATE TABLE IF NOT EXISTS pr_pipelines (
+			pr_id         BIGINT NOT NULL,
+			repo          TEXT   NOT NULL,
+			pipeline_uuid TEXT   NOT NULL,
+			PRIMARY KEY (pr_id, repo, pipeline_uuid)
+		)`,
+		// Idempotent migrations: add new columns to pr_report for databases
+		// created before this schema version.
+		`ALTER TABLE pr_report ADD COLUMN IF NOT EXISTS pipeline_uuid     TEXT DEFAULT ''`,
+		`ALTER TABLE pr_report ADD COLUMN IF NOT EXISTS environment_name  TEXT DEFAULT ''`,
+		`ALTER TABLE pr_report ADD COLUMN IF NOT EXISTS deployment_state  TEXT DEFAULT ''`,
+		`ALTER TABLE pr_report ADD COLUMN IF NOT EXISTS deployment_status TEXT DEFAULT ''`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -161,6 +235,191 @@ func CreateSchema(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// UpsertPipelines upserts pipeline rows for the given repo. Existing rows are
+// updated so that re-running the scraper reflects the latest pipeline state
+// (e.g. a pipeline that was IN_PROGRESS is now COMPLETED).
+func UpsertPipelines(ctx context.Context, db *sql.DB, repo string, pipelines []PipelineData) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO pipelines
+		(pipeline_uuid, repo, build_number, run_number,
+		 creator_name, creator_uuid, creator_account_id,
+		 target_ref_type, target_ref_name, trigger_name,
+		 state_name, result_name,
+		 created_on, completed_on, build_seconds_used, raw_json)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+		ON CONFLICT (pipeline_uuid, repo) DO UPDATE SET
+		  build_number       = EXCLUDED.build_number,
+		  run_number         = EXCLUDED.run_number,
+		  creator_name       = EXCLUDED.creator_name,
+		  creator_uuid       = EXCLUDED.creator_uuid,
+		  creator_account_id = EXCLUDED.creator_account_id,
+		  target_ref_type    = EXCLUDED.target_ref_type,
+		  target_ref_name    = EXCLUDED.target_ref_name,
+		  trigger_name       = EXCLUDED.trigger_name,
+		  state_name         = EXCLUDED.state_name,
+		  result_name        = EXCLUDED.result_name,
+		  created_on         = EXCLUDED.created_on,
+		  completed_on       = EXCLUDED.completed_on,
+		  build_seconds_used = EXCLUDED.build_seconds_used,
+		  raw_json           = EXCLUDED.raw_json
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, p := range pipelines {
+		raw, _ := json.Marshal(p)
+		completedOn := ""
+		if p.CompletedOn != nil {
+			completedOn = p.CompletedOn.Format(time.RFC3339)
+		}
+		if _, err := stmt.ExecContext(ctx,
+			p.UUID, repo, p.BuildNumber, p.RunNumber,
+			p.Creator.DisplayName, p.Creator.UUID, p.Creator.AccountID,
+			p.Target.RefType, p.Target.RefName,
+			p.TriggerName(),
+			p.State.Name, p.State.Result.Name,
+			p.CreatedOn.Format(time.RFC3339), completedOn,
+			p.BuildSecondsUsed,
+			string(raw),
+		); err != nil {
+			return fmt.Errorf("upsert pipeline %s: %w", p.UUID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// UpsertDeployments upserts deployment rows for the given repo. Existing rows
+// are updated so re-scraping reflects the latest deployment state.
+func UpsertDeployments(ctx context.Context, db *sql.DB, repo string, deployments []DeploymentData) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO deployments
+		(deployment_uuid, repo, pipeline_uuid, environment_uuid, environment_name,
+		 state_name, status_name, release_name, created_on, completed_on, raw_json)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (deployment_uuid, repo) DO UPDATE SET
+		  pipeline_uuid    = EXCLUDED.pipeline_uuid,
+		  environment_uuid = EXCLUDED.environment_uuid,
+		  environment_name = EXCLUDED.environment_name,
+		  state_name       = EXCLUDED.state_name,
+		  status_name      = EXCLUDED.status_name,
+		  release_name     = EXCLUDED.release_name,
+		  created_on       = EXCLUDED.created_on,
+		  completed_on     = EXCLUDED.completed_on,
+		  raw_json         = EXCLUDED.raw_json
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, d := range deployments {
+		raw, _ := json.Marshal(d)
+		completedOn := ""
+		if d.State.CompletedOn != nil {
+			completedOn = d.State.CompletedOn.Format(time.RFC3339)
+		}
+		if _, err := stmt.ExecContext(ctx,
+			d.UUID, repo, d.Pipeline.UUID,
+			d.Environment.UUID, d.Environment.Name,
+			d.State.Name, d.State.Status.Name,
+			d.Release.Name,
+			d.CreatedOn.Format(time.RFC3339), completedOn,
+			string(raw),
+		); err != nil {
+			return fmt.Errorf("upsert deployment %s: %w", d.UUID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// DeploymentExistsByPipelineUUID returns true when the deployments table already
+// contains at least one row for the given pipeline UUID and repo. Used to skip
+// the Bitbucket /deployments/{uuid} API call when data is already cached.
+func DeploymentExistsByPipelineUUID(ctx context.Context, db *sql.DB, repo, pipelineUUID string) (bool, error) {
+	var exists bool
+	err := db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM deployments WHERE repo = $1 AND pipeline_uuid = $2)`,
+		repo, pipelineUUID,
+	).Scan(&exists)
+	return exists, err
+}
+
+// UpsertPRPipelines upserts rows into pr_pipelines linking PRs to pipeline UUIDs.
+// Existing rows are left unchanged (DO NOTHING) — the link is immutable.
+func UpsertPRPipelines(ctx context.Context, db *sql.DB, repo string, links []PRPipelineLink) error {
+	if len(links) == 0 {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO pr_pipelines (pr_id, repo, pipeline_uuid)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (pr_id, repo, pipeline_uuid) DO NOTHING
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, l := range links {
+		if _, err := stmt.ExecContext(ctx, l.PRID, repo, l.PipelineUUID); err != nil {
+			return fmt.Errorf("upsert pr_pipeline pr %d -> %s: %w", l.PRID, l.PipelineUUID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// PipelineExistsByUUID returns true when the pipelines table already contains
+// a row for the given pipeline UUID and repo. Used to skip redundant API calls.
+func PipelineExistsByUUID(ctx context.Context, db *sql.DB, repo, pipelineUUID string) (bool, error) {
+	var exists bool
+	err := db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pipelines WHERE repo = $1 AND pipeline_uuid = $2)`,
+		repo, pipelineUUID,
+	).Scan(&exists)
+	return exists, err
+}
+
+// QueryPRPipelineLinks returns all pr_pipelines rows for a repo, keyed by pr_id.
+func QueryPRPipelineLinks(ctx context.Context, db *sql.DB, repo string) (map[int][]string, error) {
+	rows, err := db.QueryContext(ctx,
+		"SELECT pr_id, pipeline_uuid FROM pr_pipelines WHERE repo = $1", repo)
+	if err != nil {
+		return nil, fmt.Errorf("query pr_pipelines: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int][]string)
+	for rows.Next() {
+		var prID int
+		var uuid string
+		if err := rows.Scan(&prID, &uuid); err != nil {
+			return nil, err
+		}
+		out[prID] = append(out[prID], uuid)
+	}
+	return out, rows.Err()
 }
 
 // UpsertPullRequests inserts or updates PR rows for the given repo.
@@ -440,7 +699,16 @@ func UpsertPRStatuses(ctx context.Context, db *sql.DB, repo string, statuses []B
 
 // PopulateReportTable rebuilds pr_report rows for the given repo from the
 // already-computed reportData map (output of mapPrWithOtherData).
-func PopulateReportTable(ctx context.Context, db *sql.DB, repo string, reportData map[int]*PullRequestReportData) error {
+// depByPipelineUUID maps pipeline_uuid → DeploymentData for resolving
+// environment/deployment columns; prLinks maps pr_id → []pipeline_uuid.
+func PopulateReportTable(
+	ctx context.Context,
+	db *sql.DB,
+	repo string,
+	reportData map[int]*PullRequestReportData,
+	depByPipelineUUID map[string]DeploymentData,
+	prLinks map[int][]string,
+) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -456,8 +724,9 @@ func PopulateReportTable(ctx context.Context, db *sql.DB, repo string, reportDat
 		(pr_id, repo, src_repo, src_branch, dest_repo, dest_branch,
 		 title, description, state, author, created, updated,
 		 file_changed, added, removed, total,
-		 activity_type, activity_user, activity_content)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		 activity_type, activity_user, activity_content,
+		 pipeline_uuid, environment_name, deployment_state, deployment_status)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
 	`)
 	if err != nil {
 		return err
@@ -472,6 +741,17 @@ func PopulateReportTable(ctx context.Context, db *sql.DB, repo string, reportDat
 			removed += ds.LinesRemoved
 		}
 		total := added + removed
+
+		// Resolve pipeline + deployment data for this PR.
+		pipelineUUID, envName, depState, depStatus := "", "", "", ""
+		if uuids, ok := prLinks[rep.pr.ID]; ok && len(uuids) > 0 {
+			pipelineUUID = uuids[0]
+			if dep, ok := depByPipelineUUID[pipelineUUID]; ok {
+				envName   = dep.Environment.Name
+				depState  = dep.State.Name
+				depStatus = dep.State.Status.Name
+			}
+		}
 
 		pr := rep.pr
 		for _, act := range rep.activity {
@@ -497,6 +777,7 @@ func PopulateReportTable(ctx context.Context, db *sql.DB, repo string, reportDat
 				pr.CreatedOn.Format("2006-01-02"), pr.UpdatedOn.Format("2006-01-02"),
 				fileChanged, added, removed, total,
 				actType, user, content,
+				pipelineUUID, envName, depState, depStatus,
 			); err != nil {
 				return fmt.Errorf("insert pr_report for pr %d: %w", pr.ID, err)
 			}

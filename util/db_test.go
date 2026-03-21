@@ -381,7 +381,7 @@ func TestPopulateReportTable(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
 
-	if err := PopulateReportTable(ctx, db, "repo", buildReportData()); err != nil {
+	if err := PopulateReportTable(ctx, db, "repo", buildReportData(), nil, nil); err != nil {
 		t.Fatalf("PopulateReportTable: %v", err)
 	}
 
@@ -406,7 +406,7 @@ func TestPopulateReportTable_ExcludesUpdates(t *testing.T) {
 		1: {pr: pr, activity: []PullRequestActivityData{updateAct}},
 	}
 
-	PopulateReportTable(ctx, db, "repo", data)
+	PopulateReportTable(ctx, db, "repo", data, nil, nil)
 
 	var count int
 	db.QueryRow("SELECT COUNT(*) FROM pr_report WHERE repo='repo'").Scan(&count)
@@ -433,7 +433,7 @@ func TestPopulateReportTable_AggregatesDiffStats(t *testing.T) {
 		},
 	}
 
-	PopulateReportTable(ctx, db, "repo", data)
+	PopulateReportTable(ctx, db, "repo", data, nil, nil)
 
 	var added, removed, total int
 	db.QueryRow("SELECT added, removed, total FROM pr_report WHERE repo='repo'").
@@ -447,9 +447,9 @@ func TestPopulateReportTable_DeletesExisting(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
 
-	PopulateReportTable(ctx, db, "repo", buildReportData())
+	PopulateReportTable(ctx, db, "repo", buildReportData(), nil, nil)
 	// Re-run: old rows must be deleted first.
-	PopulateReportTable(ctx, db, "repo", buildReportData())
+	PopulateReportTable(ctx, db, "repo", buildReportData(), nil, nil)
 
 	var count int
 	db.QueryRow("SELECT COUNT(*) FROM pr_report WHERE repo='repo'").Scan(&count)
